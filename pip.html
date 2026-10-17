@@ -98,6 +98,10 @@ body:hover .btns { opacity: 1; }
 </div>
 
 <script>
+/* 幂等保护：防止脚本被重复执行时报重复声明 */
+if (!window.__pipBooted) {
+  window.__pipBooted = true;
+  (function () {
 'use strict';
 /* 镜像模式：实时显示主窗口广播的专注状态。
    Tauri 环境用原生事件收听（零延迟）；浏览器兜底走 localhost:8520 轮询。 */
@@ -153,10 +157,24 @@ $('#closeBtn').addEventListener('click', () => {
 });
 
 if (isTauri) {
-  /* 收听主窗口广播 */
-  window.__TAURI__.event.listen('focus-state', (e) => { applyState(e.payload); });
-  /* 上线即请求一次当前状态（广播可能早于本窗口打开） */
-  window.__TAURI__.event.emit('focus-request').catch(() => {});
+  /* 收听主窗口广播（注册成功后请求一次当前状态，防竞态重试） */
+  (async () => {
+    try {
+      await window.__TAURI__.event.listen('focus-state', (e) => {
+        console.log('[pip] 收到 focus-state:', e.payload);
+        applyState(e.payload);
+      });
+      $('#taskText').textContent = '监听已注册，等待状态…';
+    } catch (err) {
+      $('#taskText').textContent = '监听注册失败: ' + err;
+      return;
+    }
+    const req = () => window.__TAURI__.event.emit('focus-request')
+      .then(() => console.log('[pip] 已发 focus-request'))
+      .catch((e) => console.warn('[pip] focus-request 失败:', e));
+    req();
+    setTimeout(req, 800);
+  })();
 } else {
   /* 浏览器兜底：轮询本地服务器 */
   async function poll() {
@@ -172,6 +190,8 @@ if (isTauri) {
 
 setInterval(loop, 500);
 loop();
+  })();
+}
 </script>
 </body>
 </html>

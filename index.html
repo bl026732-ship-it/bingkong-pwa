@@ -1026,7 +1026,11 @@ const Pomodoro = {
       tickAt: this.running ? this._tickAt : 0
     };
     if (window.__TAURI__) {
-      try { window.__TAURI__.event.emit('focus-state', payload); } catch (e) { /* 静默 */ }
+      try {
+        window.__TAURI__.event.emit('focus-state', payload)
+          .then(() => console.log('[main] focus-state 已广播'))
+          .catch((e) => console.warn('[main] 广播失败:', e));
+      } catch (e) { console.warn('[main] 广播异常:', e); }
       return;
     }
     if (!/^(localhost|127\.0\.0\.1):8520$/.test(location.host)) return;
@@ -1091,6 +1095,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http') && loca
 /* Tauri 环境：悬浮窗上线时请求一次当前状态（广播可能早于悬浮窗打开） */
 if (window.__TAURI__ && window.__TAURI__.event) {
   window.__TAURI__.event.listen('focus-request', () => {
+    console.log('[main] 收到 focus-request，推送状态');
     Pomodoro._lastPush = 0;
     Pomodoro.pushState();
   });
