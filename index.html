@@ -252,6 +252,47 @@ body::after {
 .task-del:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
 .task-del svg { width: 15px; height: 15px; }
 
+/* ---------- 任务池切换器 ---------- */
+#taskCard { --pool-a: var(--accent); --pool-b: var(--accent-2); }
+.pool-switch {
+  position: relative;
+  display: flex; gap: 2px;
+  padding: 4px; margin-bottom: 20px;
+  border-radius: 999px;
+  background: rgba(127,127,140,.10);
+  border: 1px solid var(--card-border);
+}
+[data-theme="light"] .pool-switch { background: rgba(255,255,255,.55); }
+.seg {
+  flex: 1; padding: 8px 4px; border-radius: 999px;
+  font-size: var(--font-sm); color: var(--text-2);
+  position: relative; z-index: 1; white-space: nowrap;
+  transition: color 200ms var(--ease);
+}
+.seg:hover { color: var(--text); }
+.seg.active { color: #241300; font-weight: 600; }
+.seg-thumb {
+  position: absolute; top: 4px; bottom: 4px; left: 4px; width: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--pool-a), var(--pool-b));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--pool-a) 40%, transparent);
+  transition: left 260ms var(--ease), width 260ms var(--ease), background 300ms var(--ease);
+}
+
+/* ---------- 任务行操作按钮（转入今日 / 退回池中） ---------- */
+.task-op {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-2); opacity: 0;
+  transition: all 150ms var(--ease);
+}
+.task-item:hover .task-op { opacity: 1; }
+.task-op svg { width: 15px; height: 15px; }
+.task-op:hover {
+  background: color-mix(in srgb, var(--pool-a) 16%, transparent);
+  color: var(--pool-a);
+}
+
 .done-label {
   margin-top: 22px; font-size: 11px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase;
   color: var(--text-2); display: flex; align-items: center; gap: 10px;
@@ -350,15 +391,21 @@ body::after {
 
 <main class="main">
 
-  <!-- 今日任务 -->
-  <section class="card">
-    <div class="card-title">今日待烤 <small>点击任务 = 开始专注它</small></div>
+  <!-- 今日任务 / 任务池 -->
+  <section class="card" id="taskCard">
+    <div class="card-title"><span id="poolTitle">今日待烤</span><small id="poolHint">点击任务 = 开始专注它</small></div>
+    <div class="pool-switch" id="poolSwitch">
+      <span class="seg-thumb" id="segThumb"></span>
+      <button class="seg active" data-pool="daily">🍪 今日待烤</button>
+      <button class="seg" data-pool="basic">⏰ 基础池</button>
+      <button class="seg" data-pool="elite">✦ 卓越池</button>
+    </div>
     <div class="task-input-row">
       <input class="task-input" id="taskInput" placeholder="要做点什么？回车快速添加" maxlength="80">
       <button class="btn-primary" id="taskAddBtn">放入烤炉</button>
     </div>
     <ul class="task-list" id="taskList"></ul>
-    <div class="task-empty" id="taskEmpty" hidden><span class="big">🍪</span>烤炉还是空的<br>先放一块生饼进去吧</div>
+    <div class="task-empty" id="taskEmpty" hidden><span class="big" id="taskEmptyIcon">🍪</span><span id="taskEmptyText">烤炉还是空的<br>先放一块生饼进去吧</span></div>
     <div id="doneZone" hidden>
       <div class="done-label">已出炉</div>
       <ul class="task-list" style="margin-top:12px" id="doneList"></ul>
@@ -442,7 +489,7 @@ const Store = {
   },
   _blank() {
     return {
-      version: 3,
+      version: 4,
       settings: { workMinutes: 25, breakMinutes: DEFAULT_BREAK, theme: 'auto' },
       tasks: [],
       stats: { dailyTomatoes: {}, dailyMinutes: {} }
@@ -451,9 +498,9 @@ const Store = {
   _normalize(d) {
     const base = this._blank();
     return {
-      version: 3,
+      version: 4,
       settings: Object.assign(base.settings, d.settings || {}),
-      tasks: Array.isArray(d.tasks) ? d.tasks : [],
+      tasks: Array.isArray(d.tasks) ? d.tasks.map(t => Object.assign({ pool: 'daily' }, t)) : [],
       stats: {
         dailyTomatoes: (d.stats && d.stats.dailyTomatoes) || {},
         dailyMinutes: (d.stats && d.stats.dailyMinutes) || {}
@@ -542,11 +589,11 @@ const Toast = {
 
 /* ============================================================
    悬浮小窗（Document Picture-in-Picture）
-   —— Chrome / Edge 111+：迷你烘焙钟，钉在屏幕角落
+   —— Chrome / Edge 111+：极简条，只留任务 + 倒计时
+   —— 点窗口 = 暂停/继续；位置由浏览器记住上次拖动处
    ============================================================ */
 const PipUI = {
   win: null,
-  R: 40, // 小窗圆环半径
 
   async toggle() {
     if (this.win) { this.win.close(); return; }
@@ -555,11 +602,12 @@ const PipUI = {
       return;
     }
     try {
-      const w = await window.documentPictureInPicture.requestWindow({ width: 210, height: 190 });
+      const w = await window.documentPictureInPicture.requestWindow({ width: 250, height: 116 });
       this.win = w;
       this._build(w);
       this._btn(true);
       this.render();
+      Toast.show('悬浮窗已开：点窗口可暂停/继续，拖到右上角后会记住位置');
     } catch (e) {
       this.win = null;
       Toast.show('悬浮窗打开失败');
@@ -573,56 +621,50 @@ const PipUI = {
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html { font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; }
       body {
-        min-height: 100vh; display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 4px;
-        background: #131316; color: #F2F2F5;
-        user-select: none; -webkit-user-select: none; overflow: hidden;
+        min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+        gap: 3px; padding: 8px 18px 10px; position: relative; overflow: hidden;
+        background: linear-gradient(165deg, #1A1A20 0%, #0F0F13 72%);
+        color: #F2F2F5; user-select: none; -webkit-user-select: none; cursor: pointer;
       }
+      body::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(240px 130px at 12% -35%, rgba(255,150,40,.17), transparent 65%);
+      }
+      body.break::before {
+        background: radial-gradient(240px 130px at 12% -35%, rgba(48,209,88,.15), transparent 65%);
+      }
+      .p-track { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.08); }
+      .p-track i {
+        display: block; height: 100%; width: 100%;
+        background: linear-gradient(90deg, #FFB340, #FF7A00);
+        transition: width .5s linear, background .3s;
+      }
+      body.break .p-track i { background: linear-gradient(90deg, #7BE495, #30D158); }
       .p-task {
-        max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        font-size: 11px; color: #9C9CA3; text-align: center;
+        position: relative;
+        font-size: 11px; color: #9C9CA3;
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      .p-ring { position: relative; width: 96px; height: 96px; margin: 2px 0; }
-      .p-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-      .p-bar { transition: stroke-dashoffset .5s linear, stroke .3s; }
       .p-time {
-        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-        font-size: 24px; font-weight: 300; letter-spacing: -0.02em;
+        position: relative;
+        font-size: 34px; font-weight: 250; letter-spacing: -0.03em; line-height: 1.15;
         font-variant-numeric: tabular-nums;
+        background: linear-gradient(120deg, #FFE3B3, #FFB340 50%, #FF8A1E);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+        transition: opacity .25s;
       }
-      .p-btns { display: flex; gap: 8px; }
-      .p-main {
-        padding: 6px 16px; border-radius: 999px; border: none; cursor: pointer;
-        background: linear-gradient(135deg, #FFB340, #FF7A00); color: #241300;
-        font-size: 12px; font-weight: 700;
-      }
-      .p-sub {
-        padding: 6px 12px; border-radius: 999px; cursor: pointer;
-        border: 1px solid rgba(255,255,255,.14); background: none; color: #9C9CA3; font-size: 12px;
-      }
+      body.break .p-time { background: linear-gradient(120deg, #C9F7D4, #7BE495 50%, #30D158); -webkit-background-clip: text; background-clip: text; }
+      body.paused .p-time { opacity: .35; }
+      body.paused .p-task { opacity: .65; }
     `;
     w.document.head.appendChild(st);
 
     w.document.body.innerHTML = `
+      <div class="p-track"><i id="pFill"></i></div>
       <div class="p-task" id="pTask">自由专注</div>
-      <div class="p-ring">
-        <svg viewBox="0 0 96 96">
-          <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="5"/>
-          <circle class="p-bar" id="pBar" cx="48" cy="48" r="40" fill="none" stroke="#FFB340" stroke-width="5" stroke-linecap="round"/>
-        </svg>
-        <div class="p-time" id="pTime">25:00</div>
-      </div>
-      <div class="p-btns">
-        <button class="p-main" id="pMain">开始专注</button>
-        <button class="p-sub" id="pReset">重置</button>
-      </div>`;
+      <div class="p-time" id="pTime">25:00</div>`;
 
-    const bar = w.document.getElementById('pBar');
-    bar.style.strokeDasharray = 2 * Math.PI * this.R;
-    bar.style.strokeDashoffset = 0;
-
-    w.document.getElementById('pMain').addEventListener('click', () => Pomodoro.toggleRun());
-    w.document.getElementById('pReset').addEventListener('click', () => Pomodoro.reset());
+    w.document.body.addEventListener('click', () => Pomodoro.toggleRun());
     w.addEventListener('pagehide', () => { this.win = null; this._btn(false); });
   },
 
@@ -642,13 +684,10 @@ const PipUI = {
     w.document.getElementById('pTime').textContent = timeText;
     // 标题栏直接当倒计时用（浏览器强制显示标题，那就让它有用）
     w.document.title = (Pomodoro.running ? timeText + ' · ' : '') + '饼控自律';
-    const bar = w.document.getElementById('pBar');
-    bar.style.strokeDashoffset = 2 * Math.PI * this.R * (1 - Pomodoro.remaining / Pomodoro.total);
-    bar.style.stroke = Pomodoro.mode === 'break' ? '#30D158' : '#FFB340';
-    w.document.getElementById('pMain').textContent =
-      Pomodoro.mode === 'break'
-        ? (Pomodoro.running ? '暂停休息' : (Pomodoro.remaining < Pomodoro.total ? '继续休息' : '开始休息'))
-        : (Pomodoro.running ? '暂停' : (Pomodoro.remaining < Pomodoro.total ? '继续' : '开始专注'));
+    w.document.getElementById('pFill').style.width = (Pomodoro.remaining / Pomodoro.total * 100) + '%';
+    const bd = w.document.body;
+    bd.classList.toggle('break', Pomodoro.mode === 'break');
+    bd.classList.toggle('paused', !Pomodoro.running && Pomodoro.remaining < Pomodoro.total);
   }
 };
 
@@ -656,17 +695,59 @@ const PipUI = {
    今日任务
    ============================================================ */
 const Tasks = {
+  view: 'daily',   // daily | basic | elite
+
+  POOL_META: {
+    daily: { a: '#FFB340', b: '#FF7A00', title: '今日待烤', hint: '点击任务 = 开始专注它',
+             ph: '要做点什么？回车快速添加', emptyIcon: '🍪', emptyHtml: '烤炉还是空的<br>先放一块生饼进去吧' },
+    basic: { a: '#64D2FF', b: '#0A84FF', title: '基础任务池', hint: '紧急 · 眼前的事，转入今日再专注',
+             ph: '记下来，近期要搞定的事…', emptyIcon: '⏰', emptyHtml: '基础池空空如也<br>有截止日期的事放这里' },
+    elite: { a: '#BF5AF2', b: '#7D4CDB', title: '卓越任务池', hint: '重要 · 对未来的投资',
+             ph: '为未来种下一颗种子…', emptyIcon: '✦', emptyHtml: '还没种下远方的目标<br>读本书、学个新技能？' }
+  },
+
+  init() {
+    $$('#poolSwitch .seg').forEach(b =>
+      b.addEventListener('click', () => this.setView(b.dataset.pool)));
+    window.addEventListener('resize', () => this._positionThumb());
+    this.setView('daily');
+  },
+
+  setView(pool) {
+    this.view = pool;
+    const m = this.POOL_META[pool];
+    $$('#poolSwitch .seg').forEach(b => b.classList.toggle('active', b.dataset.pool === pool));
+    const card = $('#taskCard');
+    card.style.setProperty('--pool-a', m.a);
+    card.style.setProperty('--pool-b', m.b);
+    $('#poolTitle').textContent = m.title;
+    $('#poolHint').textContent = m.hint;
+    $('#taskInput').placeholder = m.ph;
+    $('#taskEmptyIcon').textContent = m.emptyIcon;
+    $('#taskEmptyText').innerHTML = m.emptyHtml;
+    requestAnimationFrame(() => this._positionThumb());
+    this.render();
+  },
+
+  _positionThumb() {
+    const active = $('#poolSwitch .seg.active');
+    const thumb = $('#segThumb');
+    if (!active || !thumb) return;
+    thumb.style.left = active.offsetLeft + 'px';
+    thumb.style.width = active.offsetWidth + 'px';
+  },
+
   render() {
     const list = $('#taskList');
     const doneList = $('#doneList');
     list.innerHTML = '';
     doneList.innerHTML = '';
 
-    const tasks = Store.data.tasks;
-    const undone = tasks.filter(t => !t.done);
-    const done = tasks.filter(t => t.done);
+    const all = Store.data.tasks.filter(t => (t.pool || 'daily') === this.view);
+    const undone = all.filter(t => !t.done);
+    const done = all.filter(t => t.done);
 
-    $('#taskEmpty').hidden = undone.length > 0 || tasks.length > 0;
+    $('#taskEmpty').hidden = all.length > 0;
     $('#doneZone').hidden = done.length === 0;
 
     undone.forEach(t => list.appendChild(this._item(t)));
@@ -680,19 +761,34 @@ const Tasks = {
     li.className = 'task-item' + (t.done ? ' done' : '');
     li.dataset.id = t.id;
     const pomoText = t.pomos > 0 ? '🍪'.repeat(Math.min(t.pomos, 6)) + (t.pomos > 6 ? '+' : '') : '';
+    let opBtn = '';
+    if (!t.done && this.view !== 'daily') {
+      opBtn = '<button class="task-op" title="转入今日">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>' +
+      '</button>';
+    } else if (!t.done && this.view === 'daily') {
+      opBtn = '<button class="task-op" title="退回任务池">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>' +
+      '</button>';
+    }
     li.innerHTML =
       '<button class="task-check" title="完成">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
       '</button>' +
       '<span class="task-text">' + escapeHtml(t.title) + '</span>' +
       '<span class="task-pomos' + (t.pomos > 0 ? ' has' : '') + '">' + pomoText + '</span>' +
+      opBtn +
       '<button class="task-del" title="删除">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>' +
       '</button>';
 
     li.querySelector('.task-check').addEventListener('click', () => this.toggle(t.id));
     li.querySelector('.task-del').addEventListener('click', () => this.remove(t.id));
-    if (!t.done) li.addEventListener('click', (e) => {
+    const op = li.querySelector('.task-op');
+    if (op) op.addEventListener('click', () => {
+      if (this.view === 'daily') this.backToPool(t.id); else this.toToday(t.id);
+    });
+    if (!t.done && this.view === 'daily') li.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
       Pomodoro.focusTask(t.id);
     });
@@ -703,11 +799,32 @@ const Tasks = {
     const input = $('#taskInput');
     const title = input.value.trim();
     if (!title) return;
-    Store.data.tasks.push({ id: genId('t_'), title, done: false, pomos: 0, createdAt: Date.now() });
+    Store.data.tasks.push({ id: genId('t_'), title, done: false, pomos: 0, createdAt: Date.now(), pool: this.view });
     Store.save();
     input.value = '';
     input.focus();
     this.render();
+  },
+
+  toToday(id) {
+    const t = Store.data.tasks.find(x => x.id === id);
+    if (!t) return;
+    t.fromPool = t.pool;
+    t.pool = 'daily';
+    Store.save();
+    this.render();
+    Toast.show('已放入今日待烤：' + t.title);
+  },
+
+  backToPool(id) {
+    const t = Store.data.tasks.find(x => x.id === id);
+    if (!t) return;
+    if (Pomodoro.taskId === id) Pomodoro.focusTask(null);
+    t.pool = (t.fromPool === 'basic' || t.fromPool === 'elite') ? t.fromPool : 'basic';
+    delete t.fromPool;
+    Store.save();
+    this.render();
+    Toast.show('已退回任务池：' + t.title);
   },
 
   toggle(id) {
@@ -910,7 +1027,7 @@ function toggleTheme() {
    ============================================================ */
 Store.load();
 applyTheme();
-Tasks.render();
+Tasks.init();
 Pomodoro.init();
 renderStats();
 
