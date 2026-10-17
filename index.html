@@ -1072,8 +1072,8 @@ $('#pipBtn').addEventListener('click', () => PipUI.toggle());
 $('#taskAddBtn').addEventListener('click', () => Tasks.add());
 $('#taskInput').addEventListener('keydown', e => { if (e.key === 'Enter') Tasks.add(); });
 
-/* PWA：注册 Service Worker（file:// 本地直接打开时跳过） */
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+/* PWA：注册 Service Worker（file:// 或本地开发 localhost:8520 时跳过，开发版始终加载最新代码） */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && location.host !== 'localhost:8520' && location.host !== '127.0.0.1:8520') {
   navigator.serviceWorker.register('sw.js').catch(() => { /* 忽略注册失败 */ });
 }
 </script>
