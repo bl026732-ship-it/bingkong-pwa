@@ -240,8 +240,19 @@ body::after {
 .task-item.done .task-check { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: #241300; animation: checkPop 340ms var(--ease); }
 .task-text { flex: 1; font-size: var(--font-body); transition: color 200ms var(--ease); word-break: break-all; }
 .task-item.done .task-text { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-2) 55%, transparent); }
-.task-pomos { font-size: 12px; color: var(--text-2); flex-shrink: 0; letter-spacing: -0.1em; }
-.task-pomos.has { color: var(--accent); }
+.pomo-track { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.pomo-dots { display: inline-flex; gap: 3px; }
+.pomo-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--track); transition: background 250ms var(--ease); }
+.pomo-dot.on { background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 6px var(--glow); }
+.pomo-more { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 1px; }
+.pomo-pm {
+  width: 18px; height: 18px; border-radius: 6px; line-height: 1;
+  font-size: 13px; color: var(--text-2); opacity: .3;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 150ms var(--ease);
+}
+.task-item:hover .pomo-pm { opacity: .75; }
+.pomo-pm:hover { opacity: 1; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .task-del {
   width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -326,9 +337,6 @@ body::after {
 }
 .ring-label { font-size: var(--font-sm); color: var(--text-2); max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ring-label b { color: var(--accent); font-weight: 600; }
-
-.duration-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
-.duration-row .chip { background: transparent; }
 
 .focus-actions { display: flex; gap: 12px; justify-content: center; }
 .btn-big {
@@ -431,7 +439,6 @@ body::after {
         <div class="ring-label" id="ringLabel">自由专注</div>
       </div>
     </div>
-    <div class="duration-row" id="workDurations"></div>
     <div class="focus-actions">
       <button class="btn-big btn-start" id="startBtn">开始专注</button>
       <button class="btn-big btn-ghost" id="resetBtn">重置</button>
@@ -456,7 +463,7 @@ body::after {
    ============================================================ */
 const LITE_KEY = 'orderOS_lite';
 const LEGACY_KEY = 'orderOS_v2';
-const WORK_OPTIONS = [15, 25, 45];
+const WORK_MINUTES = 25;
 const DEFAULT_BREAK = 5;
 
 const $ = (sel, ctx) => (ctx || document).querySelector(sel);
@@ -499,8 +506,12 @@ const Store = {
     const base = this._blank();
     return {
       version: 4,
-      settings: Object.assign(base.settings, d.settings || {}),
-      tasks: Array.isArray(d.tasks) ? d.tasks.map(t => Object.assign({ pool: 'daily' }, t)) : [],
+      settings: Object.assign(base.settings, d.settings || {}, { workMinutes: WORK_MINUTES }),
+      tasks: Array.isArray(d.tasks) ? d.tasks.map(t => {
+        const n = Object.assign({ pool: 'daily' }, t);
+        if (!n.targetPomos) n.targetPomos = Math.max(1, n.pomos || 1);
+        return n;
+      }) : [],
       stats: {
         dailyTomatoes: (d.stats && d.stats.dailyTomatoes) || {},
         dailyMinutes: (d.stats && d.stats.dailyMinutes) || {}
@@ -760,7 +771,17 @@ const Tasks = {
     const li = document.createElement('li');
     li.className = 'task-item' + (t.done ? ' done' : '');
     li.dataset.id = t.id;
-    const pomoText = t.pomos > 0 ? '🍪'.repeat(Math.min(t.pomos, 6)) + (t.pomos > 6 ? '+' : '') : '';
+    const target = Math.max(1, Math.min(12, t.targetPomos | 0));
+    const done = t.pomos | 0;
+    let dots = '';
+    for (let i = 0; i < Math.min(target, 10); i++) {
+      dots += '<i class="pomo-dot' + (i < done ? ' on' : '') + '"></i>';
+    }
+    const more = done > target ? '<b class="pomo-more">+' + (done - target) + '</b>' : '';
+    const pomoHtml =
+      '<span class="pomo-dots">' + dots + '</span>' + more +
+      '<button class="pomo-pm" data-pm="-1" title="目标减一块饼干">−</button>' +
+      '<button class="pomo-pm" data-pm="1" title="目标加一块饼干">＋</button>';
     let opBtn = '';
     if (!t.done && this.view !== 'daily') {
       opBtn = '<button class="task-op" title="转入今日">' +
@@ -776,7 +797,7 @@ const Tasks = {
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
       '</button>' +
       '<span class="task-text">' + escapeHtml(t.title) + '</span>' +
-      '<span class="task-pomos' + (t.pomos > 0 ? ' has' : '') + '">' + pomoText + '</span>' +
+      '<span class="pomo-track" title="饼干进度：完成 ' + done + ' / 目标 ' + target + ' 块">' + pomoHtml + '</span>' +
       opBtn +
       '<button class="task-del" title="删除">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>' +
@@ -788,6 +809,13 @@ const Tasks = {
     if (op) op.addEventListener('click', () => {
       if (this.view === 'daily') this.backToPool(t.id); else this.toToday(t.id);
     });
+    $$('.pomo-pm', li).forEach(b => b.addEventListener('click', () => {
+      const cur = Store.data.tasks.find(x => x.id === id);
+      if (!cur) return;
+      cur.targetPomos = Math.max(1, Math.min(12, (cur.targetPomos || 1) + Number(b.dataset.pm)));
+      Store.save();
+      this.render();
+    }));
     if (!t.done && this.view === 'daily') li.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
       Pomodoro.focusTask(t.id);
@@ -799,7 +827,7 @@ const Tasks = {
     const input = $('#taskInput');
     const title = input.value.trim();
     if (!title) return;
-    Store.data.tasks.push({ id: genId('t_'), title, done: false, pomos: 0, createdAt: Date.now(), pool: this.view });
+    Store.data.tasks.push({ id: genId('t_'), title, done: false, pomos: 0, targetPomos: 1, createdAt: Date.now(), pool: this.view });
     Store.save();
     input.value = '';
     input.focus();
@@ -868,7 +896,6 @@ const Pomodoro = {
 
   init() {
     $('#ringBar').style.strokeDasharray = CIRCUMFERENCE;
-    this.buildDurationChips();
     this.reset();
     $('#startBtn').addEventListener('click', () => this.toggleRun());
     $('#resetBtn').addEventListener('click', () => this.reset());
@@ -879,24 +906,6 @@ const Pomodoro = {
         if (this.remaining <= 0) { this._complete(); return; }
         this.renderTime();
       }
-    });
-  },
-
-  buildDurationChips() {
-    const row = $('#workDurations');
-    row.innerHTML = '';
-    WORK_OPTIONS.forEach(m => {
-      const b = document.createElement('button');
-      b.className = 'chip' + (m === Store.data.settings.workMinutes ? ' active' : '');
-      b.textContent = m + ' 分钟';
-      b.addEventListener('click', () => {
-        if (this.running) { Toast.show('专注中不能改时长，先重置'); return; }
-        Store.data.settings.workMinutes = m;
-        Store.save();
-        this.buildDurationChips();
-        if (this.mode === 'work') this.reset();
-      });
-      row.appendChild(b);
     });
   },
 
