@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>饼控悬浮窗</title>
+<style>
+:root {
+  --accent: #FFB340; --accent-2: #FF7A00;
+  --green: #30D158; --green-2: #7BE495;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: transparent;
+  color: #F2F2F5;
+  overflow: hidden;
+  user-select: none; -webkit-user-select: none;
+  position: relative;
+}
+.win {
+  position: absolute; inset: 0;
+  border-radius: 16px;
+  background: linear-gradient(165deg, rgba(26,26,32,.92), rgba(15,15,19,.95));
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.09);
+  box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 4px; padding: 10px 16px 12px;
+  overflow: hidden;
+  animation: fadeIn .35s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.win::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.18), transparent 65%);
+}
+body.break .win::before {
+  background: radial-gradient(220px 120px at 12% -35%, rgba(48,209,88,.16), transparent 65%);
+}
+.track { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.08); }
+.track i {
+  display: block; height: 100%; width: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width .5s linear;
+}
+body.break .track i { background: linear-gradient(90deg, var(--green-2), var(--green)); }
+.task-row { position: relative; display: flex; align-items: center; min-height: 20px; }
+#taskText {
+  font-size: 11px; color: #B9B9C0;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: text; border-radius: 6px; padding: 2px 6px; margin-left: -6px;
+  transition: all .15s;
+}
+#taskText:hover { background: rgba(255,255,255,.08); color: #E8E8EE; }
+#taskText.empty { color: #6A6A72; }
+#taskInput {
+  font-family: inherit; font-size: 11px; color: #F2F2F5;
+  background: rgba(255,255,255,.08);
+  border: 1px solid var(--accent); border-radius: 6px; outline: none;
+  padding: 2px 6px; width: 100%; user-select: text; -webkit-user-select: text;
+}
+.time-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.time {
+  font-size: 36px; font-weight: 250; letter-spacing: -0.03em; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(120deg, #FFE3B3, var(--accent) 50%, #FF8A1E);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+body.break .time {
+  background: linear-gradient(120deg, #C9F7D4, var(--green-2) 50%, var(--green));
+  -webkit-background-clip: text; background-clip: text;
+}
+body.paused .time { opacity: .35; }
+.btns { display: flex; gap: 6px; opacity: 0; transition: opacity .2s; flex-shrink: 0; }
+body:hover .btns { opacity: 1; }
+.btns button {
+  width: 26px; height: 26px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+  color: #C9C9CF; font-size: 12px; cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.btns button:hover { background: rgba(255,255,255,.15); color: #fff; }
+#closeBtn:hover { background: rgba(255,69,58,.28); color: #FF6B61; border-color: transparent; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="track"><i id="fill"></i></div>
+  <div class="task-row">
+    <span id="taskText" class="empty">点击输入当前任务…</span>
+    <input id="taskInput" hidden maxlength="60">
+  </div>
+  <div class="time-row" data-tauri-drag-region>
+    <div class="time" id="time">25:00</div>
+    <div class="btns">
+      <button id="pauseBtn" title="暂停 / 继续">⏸</button>
+      <button id="resetBtn" title="重置">↺</button>
+      <button id="closeBtn" title="关闭">✕</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const WORK = 25 * 60, BREAK = 5 * 60;
+const KEY = 'bingkong_pip_state';
+const $ = s => document.querySelector(s);
+
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const s = Object.assign({ task: '', mode: 'work', total: WORK, remaining: WORK, running: false, tickAt: 0 }, JSON.parse(raw));
+      // 恢复中断的计时（按真实时间校正）
+      if (s.running && s.tickAt) {
+        s.remaining = Math.max(0, Math.round((s.tickAt - Date.now()) / 1000));
+        if (s.remaining <= 0) { s.running = false; s.remaining = s.total; s.mode = 'work'; }
+      }
+      return s;
+    }
+  } catch (e) { /* 忽略损坏数据 */ }
+  return { task: '', mode: 'work', total: WORK, remaining: WORK, running: false, tickAt: 0 };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+}
+function fmt(s) {
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+/* 提示音（Web Audio，无外部文件） */
+const Sound = {
+  _ctx: null,
+  _ensure() {
+    if (!this._ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) this._ctx = new AC();
+    }
+    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume();
+    return this._ctx;
+  },
+  _tone(freq, start, dur) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+    gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + start + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime + start);
+    osc.stop(ctx.currentTime + start + dur + 0.05);
+  },
+  workDone() { if (this._ensure()) { this._tone(880, 0, 0.25); this._tone(1174.7, 0.28, 0.4); } },
+  breakDone() { if (this._ensure()) { this._tone(587.3, 0, 0.25); this._tone(880, 0.28, 0.4); } }
+};
+
+let timer = null;
+
+function render() {
+  $('#time').textContent = fmt(state.remaining);
+  $('#fill').style.width = (state.remaining / state.total * 100) + '%';
+  document.body.classList.toggle('break', state.mode === 'break');
+  document.body.classList.toggle('paused', !state.running && state.remaining < state.total);
+  $('#pauseBtn').textContent = state.running ? '⏸' : '▶';
+  document.title = (state.running ? fmt(state.remaining) + ' · ' : '') + '饼控悬浮窗';
+  save();
+}
+
+function tick() {
+  if (!state.running) return;
+  const left = state.tickAt - Date.now();
+  state.remaining = Math.max(0, Math.round(left / 1000));
+  if (left <= 0) { complete(); return; }
+  render();
+}
+
+function start() {
+  Sound._ensure();
+  state.running = true;
+  state.tickAt = Date.now() + state.remaining * 1000;
+  clearInterval(timer);
+  timer = setInterval(tick, 250);
+  render();
+}
+function pause() {
+  state.running = false;
+  clearInterval(timer);
+  render();
+}
+function reset() {
+  state.running = false;
+  clearInterval(timer);
+  state.mode = 'work';
+  state.total = state.remaining = WORK;
+  render();
+}
+function complete() {
+  clearInterval(timer);
+  state.running = false;
+  if (state.mode === 'work') {
+    Sound.workDone();
+    state.mode = 'break';
+    state.total = state.remaining = BREAK;
+    render();
+    start();           // 自动进入休息
+  } else {
+    Sound.breakDone();
+    state.mode = 'work';
+    state.total = state.remaining = WORK;
+    render();
+  }
+}
+
+/* 任务名：点击文本进入编辑 */
+const taskText = $('#taskText'), taskInput = $('#taskInput');
+function syncTask() {
+  taskText.textContent = state.task || '点击输入当前任务…';
+  taskText.classList.toggle('empty', !state.task);
+}
+taskText.addEventListener('click', () => {
+  taskInput.value = state.task;
+  taskText.hidden = true;
+  taskInput.hidden = false;
+  taskInput.focus();
+  taskInput.select();
+});
+function commitTask() {
+  state.task = taskInput.value.trim();
+  taskInput.hidden = true;
+  taskText.hidden = false;
+  syncTask();
+  save();
+}
+taskInput.addEventListener('blur', commitTask);
+taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') taskInput.blur(); });
+
+/* 按钮 */
+$('#pauseBtn').addEventListener('click', () => { state.running ? pause() : start(); });
+$('#resetBtn').addEventListener('click', reset);
+$('#closeBtn').addEventListener('click', () => {
+  save();
+  try { window.__TAURI__.window.getCurrentWindow().close(); }
+  catch (e) { window.close(); }
+});
+
+window.addEventListener('pagehide', save);
+
+/* 启动 */
+syncTask();
+render();
+if (state.running) {
+  state.tickAt = Date.now() + state.remaining * 1000;
+  timer = setInterval(tick, 250);
+}
+</script>
+</body>
+</html>

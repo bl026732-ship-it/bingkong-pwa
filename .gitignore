@@ -2,3 +2,4 @@ node_modules/
 _lite_check.js
 *.log
 .kimi-code/
+src-tauri/target/

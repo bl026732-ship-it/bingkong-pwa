@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.3"
   }
 }
