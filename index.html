@@ -403,34 +403,96 @@ body::after {
 }
 .foot button { color: var(--accent); font-size: inherit; }
 
-/* ---------- 烤饼日历（近 15 周热力图） ---------- */
-.cal-card {
-  max-width: 1060px; margin: 0 auto; text-align: left;
+/* ---------- 烤饼日历：底部把手 + 升起面板 ---------- */
+.dock {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+  z-index: 150;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px; border-radius: 999px;
   background: var(--card); border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg); padding: 26px 30px 20px;
   backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
   box-shadow: var(--shadow);
+  font-size: var(--font-sm); color: var(--text-2);
+  transition: all 180ms var(--ease);
   animation: rise 560ms var(--ease) both;
 }
-.cal-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; font-size: var(--font-sm); color: var(--text-2); }
-.cal-head b { color: var(--text); font-size: var(--font-body); font-weight: 700; }
-.cal-hint { margin-left: auto; font-size: var(--font-xs); opacity: .7; }
-.cal-grid { display: grid; grid-template-rows: repeat(7, 16px); grid-auto-flow: column; grid-auto-columns: 16px; gap: 3px; justify-content: center; }
-.cal-grid i {
-  width: 16px; height: 16px; border-radius: 4px;
-  background: var(--track); cursor: default;
-  transition: transform .15s var(--ease);
+.dock:hover { border-color: var(--accent); color: var(--text); transform: translateX(-50%) translateY(-2px); }
+.dock-title { font-weight: 600; color: var(--text); }
+.dock-heat { display: flex; gap: 2px; }
+.dock-heat i { width: 8px; height: 8px; border-radius: 2px; background: var(--track); }
+.dock-heat i.l1 { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.dock-heat i.l2 { background: color-mix(in srgb, var(--accent) 65%, transparent); }
+.dock-heat i.l3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.dock-total { font-variant-numeric: tabular-nums; }
+.dock-arrow { color: var(--accent); font-size: 11px; }
+
+.cal-mask {
+  position: fixed; inset: 0; z-index: 190;
+  background: rgba(0,0,0,.38);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  opacity: 0; transition: opacity .3s var(--ease);
 }
-.cal-grid i:hover { transform: scale(1.25); }
-.cal-grid i.future { visibility: hidden; }
-.cal-grid i.lv1 { background: color-mix(in srgb, var(--accent) 32%, transparent); }
-.cal-grid i.lv2 { background: color-mix(in srgb, var(--accent) 62%, transparent); }
-.cal-grid i.lv3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 1px 5px var(--glow); }
-.cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 14px; font-size: var(--font-xs); color: var(--text-2); }
-.cal-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--track); }
-.cal-legend i.lv1 { background: color-mix(in srgb, var(--accent) 32%, transparent); }
-.cal-legend i.lv2 { background: color-mix(in srgb, var(--accent) 62%, transparent); }
-.cal-legend i.lv3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.cal-mask.show { opacity: 1; }
+
+.cal-sheet {
+  position: fixed; left: 50%; bottom: 0;
+  transform: translate(-50%, 106%);
+  width: min(780px, 95vw); z-index: 200;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  border: 1px solid var(--card-border); border-bottom: none;
+  border-radius: 26px 26px 0 0;
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 -20px 70px rgba(0,0,0,.55);
+  padding: 20px 26px 28px;
+  transition: transform .4s var(--ease);
+}
+.cal-sheet.show { transform: translate(-50%, 0); }
+.cal-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.cal-sheet-title { font-size: var(--font-body); font-weight: 700; }
+.cal-sheet-title small { font-size: var(--font-xs); font-weight: 400; color: var(--text-2); margin-left: 8px; }
+.cal-close {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-2); border: 1px solid var(--card-border);
+  transition: all 150ms var(--ease);
+}
+.cal-close:hover { color: var(--danger); border-color: var(--danger); }
+.cal-month { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 12px; }
+.cal-month b { font-size: var(--font-lg); font-variant-numeric: tabular-nums; }
+.cal-nav {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--text-2);
+  border: 1px solid var(--card-border);
+  transition: all 150ms var(--ease);
+}
+.cal-nav:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.cal-nav:disabled { opacity: .25; cursor: default; }
+.cal-weekdays, .cal-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-weekdays { margin-bottom: 8px; text-align: center; font-size: 12px; color: var(--text-2); }
+.cal-cell {
+  position: relative; min-height: 72px;
+  border-radius: 14px; padding: 8px 10px;
+  background: var(--card); border: 1px solid var(--card-border);
+  transition: transform .15s var(--ease), border-color .15ms var(--ease);
+}
+.cal-cell:hover { transform: translateY(-2px); border-color: var(--accent); }
+.cal-cell.blank { background: transparent; border-color: transparent; pointer-events: none; }
+.cal-cell.future { opacity: .3; }
+.cal-cell .d { font-size: 12px; color: var(--text-2); }
+.cal-cell .n {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 23px; font-weight: 700; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.cal-cell .n.zero { background: none; color: var(--text-2); opacity: .22; -webkit-text-fill-color: currentColor; }
+.cal-cell.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 14px var(--glow); }
+.cal-cell.lv1 { background: color-mix(in srgb, var(--accent) 9%, var(--card)); }
+.cal-cell.lv2 { background: color-mix(in srgb, var(--accent) 17%, var(--card)); }
+.cal-cell.lv3 { background: color-mix(in srgb, var(--accent) 26%, var(--card)); }
 </style>
 </head>
 <body>
@@ -499,16 +561,28 @@ body::after {
 </main>
 
 <footer class="foot">
-  <div class="cal-card">
-    <div class="cal-head">
-      <b>🍪 烤饼日历</b>
-      <span id="calTotal">近 15 周</span>
-      <span class="cal-hint">悬停格子查看每天详情</span>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
-    <div class="cal-legend"><span>少</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><span>多</span></div>
-  </div>
+  <button class="dock" id="calDock" title="打开烤饼日历">
+    <span class="dock-title">🍪 烤饼日历</span>
+    <span class="dock-heat" id="dockHeat"></span>
+    <span class="dock-total" id="dockTotal"></span>
+    <span class="dock-arrow">▲</span>
+  </button>
 </footer>
+
+<div class="cal-mask" id="calMask" hidden></div>
+<div class="cal-sheet" id="calSheet">
+  <div class="cal-sheet-head">
+    <div class="cal-sheet-title">🍪 烤饼日历 <small>每天出炉的饼干数</small></div>
+    <button class="cal-close" id="calClose" title="收起">✕</button>
+  </div>
+  <div class="cal-month">
+    <button class="cal-nav" id="calPrev" title="上个月">‹</button>
+    <b id="calMonthTitle">–</b>
+    <button class="cal-nav" id="calNext" title="下个月">›</button>
+  </div>
+  <div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+  <div class="cal-month-grid" id="calMonthGrid"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -1107,40 +1181,106 @@ function renderStats() {
   const date = todayStr();
   $('#statTomatoes').textContent = d.dailyTomatoes[date] || 0;
   $('#statMinutes').textContent = d.dailyMinutes[date] || 0;
-  renderCalendar();
+  renderDockHeat();
 }
 
-/* 烤饼日历：近 15 周（周一~周日逐列），颜色深浅 = 当天出炉饼干数 */
-function renderCalendar() {
-  const grid = $('#calGrid');
-  if (!grid) return;
-  grid.innerHTML = '';
+/* ---------- 烤饼日历：底部把手预览（最近 14 天迷你热力） ---------- */
+function renderDockHeat() {
+  const el = $('#dockHeat');
+  if (!el) return;
+  el.innerHTML = '';
   const stats = Store.data.stats.dailyTomatoes || {};
   const now = new Date();
-  const dow = (now.getDay() + 6) % 7;              // 本周一 = 0
-  const thisMon = new Date(now);
-  thisMon.setDate(now.getDate() - dow);
-  const start = new Date(thisMon);
-  start.setDate(thisMon.getDate() - 14 * 7);       // 往前 14 周，共 15 列
-  let total = 0;
-  const todayKey = todayStr();
-  for (let w = 0; w < 15; w++) {
-    for (let d = 0; d < 7; d++) {
-      const day = new Date(start);
-      day.setDate(start.getDate() + w * 7 + d);
-      const el = document.createElement('i');
-      if (day > now) { el.className = 'future'; grid.appendChild(el); continue; }
-      const key = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
-      const n = stats[key] || 0;
-      total += n;
-      el.className = n === 0 ? 'lv0' : n <= 2 ? 'lv1' : n <= 4 ? 'lv2' : 'lv3';
-      el.title = (day.getMonth() + 1) + '月' + day.getDate() + '日 · 出炉 ' + n + ' 块';
-      if (key === todayKey) el.style.outline = '1.5px solid var(--accent)';
-      grid.appendChild(el);
-    }
+  for (let i = 13; i >= 0; i--) {
+    const day = new Date(now);
+    day.setDate(now.getDate() - i);
+    const key = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
+    const n = stats[key] || 0;
+    const dot = document.createElement('i');
+    dot.className = n === 0 ? '' : n <= 2 ? 'l1' : n <= 4 ? 'l2' : 'l3';
+    dot.title = (day.getMonth() + 1) + '月' + day.getDate() + '日 · ' + n + ' 块';
+    el.appendChild(dot);
   }
-  $('#calTotal').textContent = '近 15 周共 ' + total + ' 块';
 }
+
+/* ---------- 烤饼日历：月历抽屉 ---------- */
+const MONTH_CN = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const Cal = {
+  view: null,   // 正在查看的月份（Date，日固定为 1）
+
+  init() {
+    const now = new Date();
+    this.view = new Date(now.getFullYear(), now.getMonth(), 1);
+    $('#calDock').addEventListener('click', () => this.open());
+    $('#calClose').addEventListener('click', () => this.close());
+    $('#calMask').addEventListener('click', () => this.close());
+    $('#calPrev').addEventListener('click', () => { this.shift(-1); });
+    $('#calNext').addEventListener('click', () => { this.shift(1); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && $('#calSheet').classList.contains('show')) this.close();
+    });
+    this.render();
+  },
+
+  open() {
+    $('#calMask').hidden = false;
+    requestAnimationFrame(() => {
+      $('#calMask').classList.add('show');
+      $('#calSheet').classList.add('show');
+    });
+    this.render();
+  },
+
+  close() {
+    $('#calMask').classList.remove('show');
+    $('#calSheet').classList.remove('show');
+    setTimeout(() => { $('#calMask').hidden = true; }, 320);
+  },
+
+  shift(delta) {
+    this.view = new Date(this.view.getFullYear(), this.view.getMonth() + delta, 1);
+    this.render();
+  },
+
+  render() {
+    const y = this.view.getFullYear(), m = this.view.getMonth();
+    const stats = Store.data.stats.dailyTomatoes || {};
+    $('#calMonthTitle').textContent = y + '年 ' + MONTH_CN[m];
+
+    /* 下一个月不许超过当前月 */
+    const now = new Date();
+    const isCurrentMonth = y === now.getFullYear() && m === now.getMonth();
+    $('#calNext').disabled = isCurrentMonth;
+
+    const firstDow = new Date(y, m, 1).getDay();          // 0=周日
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const grid = $('#calMonthGrid');
+    grid.innerHTML = '';
+    for (let i = 0; i < firstDow; i++) {
+      const b = document.createElement('div');
+      b.className = 'cal-cell blank';
+      grid.appendChild(b);
+    }
+    let monthTotal = 0;
+    const tKey = todayStr();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      const n = stats[key] || 0;
+      monthTotal += n;
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell'
+        + (key === tKey ? ' today' : '')
+        + (isCurrentMonth && d > now.getDate() ? ' future' : '')
+        + (n === 0 ? '' : n <= 2 ? ' lv1' : n <= 4 ? ' lv2' : ' lv3');
+      cell.innerHTML =
+        '<span class="d">' + d + '</span>' +
+        '<span class="n' + (n === 0 ? ' zero' : '') + '">' + (n === 0 ? '·' : n) + '</span>';
+      cell.title = (m + 1) + '月' + d + '日 · 出炉 ' + n + ' 块';
+      grid.appendChild(cell);
+    }
+    $('#dockTotal').textContent = (isCurrentMonth ? '本月' : MONTH_CN[m]) + ' ' + monthTotal + ' 块';
+  }
+};
 
 /* ============================================================
    主题
@@ -1168,6 +1308,7 @@ applyTheme();
 Tasks.init();
 Pomodoro.init();
 renderStats();
+Cal.init();
 
 $('#themeBtn').addEventListener('click', toggleTheme);
 $('#pipBtn').addEventListener('click', () => {
