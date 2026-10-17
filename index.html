@@ -403,28 +403,40 @@ body::after {
 }
 .foot button { color: var(--accent); font-size: inherit; }
 
-/* ---------- 烤饼日历：底部把手 + 升起面板 ---------- */
+/* ---------- 底部通栏把手（均分整行） ---------- */
 .dock {
-  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
-  z-index: 150;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 18px; border-radius: 999px;
-  background: var(--card); border: 1px solid var(--card-border);
-  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
-  box-shadow: var(--shadow);
+  flex: 1; min-width: 0;
+  position: relative;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 13px 8px 15px;
   font-size: var(--font-sm); color: var(--text-2);
+  white-space: nowrap;
   transition: all 180ms var(--ease);
-  animation: rise 560ms var(--ease) both;
 }
-.dock:hover { border-color: var(--accent); color: var(--text); transform: translateX(-50%) translateY(-2px); }
+.dock:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.dock:active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.dock + .dock::before {
+  content: ''; position: absolute; left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 1px; height: 22px;
+  background: var(--card-border);
+}
+.dock::after {
+  content: ''; position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width .2s var(--ease);
+}
+.dock:hover::after { width: 44px; }
 .dock-title { font-weight: 600; color: var(--text); }
 .dock-heat { display: flex; gap: 2px; }
-.dock-heat i { width: 8px; height: 8px; border-radius: 2px; background: var(--track); }
+.dock-heat i { width: 7px; height: 7px; border-radius: 2px; background: var(--track); }
 .dock-heat i.l1 { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .dock-heat i.l2 { background: color-mix(in srgb, var(--accent) 65%, transparent); }
 .dock-heat i.l3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 .dock-total { font-variant-numeric: tabular-nums; }
-.dock-arrow { color: var(--accent); font-size: 11px; }
+.dock-arrow { color: var(--accent); font-size: 10px; }
 
 .cal-mask {
   position: fixed; inset: 0; z-index: 190;
@@ -494,17 +506,17 @@ body::after {
 .cal-cell.lv2 { background: color-mix(in srgb, var(--accent) 17%, var(--card)); }
 .cal-cell.lv3 { background: color-mix(in srgb, var(--accent) 26%, var(--card)); }
 
-/* ---------- 底部三把手 ---------- */
+/* ---------- 底部通栏容器 ---------- */
 .dock-row {
-  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+  position: fixed; left: 0; right: 0; bottom: 0;
   z-index: 150;
-  width: max-content;
-  max-width: calc(100vw - 24px);
-  display: flex; gap: 8px; flex-wrap: nowrap;
+  display: flex;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border-top: 1px solid var(--card-border);
+  box-shadow: 0 -12px 40px rgba(0,0,0,.35);
   animation: rise 560ms var(--ease) both;
 }
-.dock-row .dock { position: static; transform: none; animation: none; white-space: nowrap; }
-.dock-row .dock:hover { transform: translateY(-2px); }
 
 /* ---------- 烤饼轨迹（折线图） ---------- */
 .trend-ranges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
