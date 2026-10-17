@@ -240,23 +240,39 @@ body::after {
 .task-item.done .task-check { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: #241300; animation: checkPop 340ms var(--ease); }
 .task-text { flex: 1; font-size: var(--font-body); transition: color 200ms var(--ease); word-break: break-all; }
 .task-item.done .task-text { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-2) 55%, transparent); }
-.pomo-track { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.pomo-dots { display: inline-flex; gap: 3px; }
-.pomo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--track); transition: background 250ms var(--ease); }
-.pomo-dot.on { background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 6px var(--glow); }
+.pomo-track { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.pomo-dots { display: inline-flex; gap: 4px; }
+.pomo-dot {
+  width: 15px; height: 15px; border-radius: 5px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  background: transparent;
+  transition: all .2s var(--ease);
+}
+.pomo-dot.on {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+  box-shadow: 0 2px 7px var(--glow);
+  animation: slotPop 260ms var(--ease);
+}
+@keyframes slotPop {
+  0% { transform: scale(.55) rotate(-6deg); }
+  60% { transform: scale(1.12) rotate(3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
 .pomo-more { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 1px; }
 .pomo-pm {
-  width: 22px; height: 22px; border-radius: 7px; line-height: 1;
-  font-size: 14px; color: var(--text-2); opacity: .55;
+  width: 20px; height: 20px; border-radius: 50%; line-height: 1;
+  font-size: 13px; color: var(--text-2); opacity: .5;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid transparent;
+  border: 1px solid var(--card-border);
+  background: transparent;
   transition: all 150ms var(--ease);
 }
 .task-item:hover .pomo-pm { opacity: .9; }
 .pomo-pm:hover {
   opacity: 1; color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .task-del {
   width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
@@ -386,6 +402,35 @@ body::after {
   line-height: 1.9;
 }
 .foot button { color: var(--accent); font-size: inherit; }
+
+/* ---------- 烤饼日历（近 15 周热力图） ---------- */
+.cal-card {
+  max-width: 1060px; margin: 0 auto; text-align: left;
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg); padding: 26px 30px 20px;
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  box-shadow: var(--shadow);
+  animation: rise 560ms var(--ease) both;
+}
+.cal-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; font-size: var(--font-sm); color: var(--text-2); }
+.cal-head b { color: var(--text); font-size: var(--font-body); font-weight: 700; }
+.cal-hint { margin-left: auto; font-size: var(--font-xs); opacity: .7; }
+.cal-grid { display: grid; grid-template-rows: repeat(7, 16px); grid-auto-flow: column; grid-auto-columns: 16px; gap: 3px; justify-content: center; }
+.cal-grid i {
+  width: 16px; height: 16px; border-radius: 4px;
+  background: var(--track); cursor: default;
+  transition: transform .15s var(--ease);
+}
+.cal-grid i:hover { transform: scale(1.25); }
+.cal-grid i.future { visibility: hidden; }
+.cal-grid i.lv1 { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.cal-grid i.lv2 { background: color-mix(in srgb, var(--accent) 62%, transparent); }
+.cal-grid i.lv3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 1px 5px var(--glow); }
+.cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 14px; font-size: var(--font-xs); color: var(--text-2); }
+.cal-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--track); }
+.cal-legend i.lv1 { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.cal-legend i.lv2 { background: color-mix(in srgb, var(--accent) 62%, transparent); }
+.cal-legend i.lv3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 </style>
 </head>
 <body>
@@ -454,8 +499,15 @@ body::after {
 </main>
 
 <footer class="foot">
-  数据只保存在本浏览器（localStorage）· 已从 1.5 版导入历史任务与烤饼统计<br>
-  <button id="wipeBtn" style="display:none">清空全部数据</button>
+  <div class="cal-card">
+    <div class="cal-head">
+      <b>🍪 烤饼日历</b>
+      <span id="calTotal">近 15 周</span>
+      <span class="cal-hint">悬停格子查看每天详情</span>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-legend"><span>少</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><span>多</span></div>
+  </div>
 </footer>
 
 <div class="toast" id="toast"></div>
@@ -1028,7 +1080,8 @@ const Pomodoro = {
       total: this.total,
       remaining: this.remaining,
       running: this.running,
-      tickAt: this.running ? this._tickAt : 0
+      tickAt: this.running ? this._tickAt : 0,
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
     };
     if (window.__TAURI__) {
       try {
@@ -1054,6 +1107,39 @@ function renderStats() {
   const date = todayStr();
   $('#statTomatoes').textContent = d.dailyTomatoes[date] || 0;
   $('#statMinutes').textContent = d.dailyMinutes[date] || 0;
+  renderCalendar();
+}
+
+/* 烤饼日历：近 15 周（周一~周日逐列），颜色深浅 = 当天出炉饼干数 */
+function renderCalendar() {
+  const grid = $('#calGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const stats = Store.data.stats.dailyTomatoes || {};
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7;              // 本周一 = 0
+  const thisMon = new Date(now);
+  thisMon.setDate(now.getDate() - dow);
+  const start = new Date(thisMon);
+  start.setDate(thisMon.getDate() - 14 * 7);       // 往前 14 周，共 15 列
+  let total = 0;
+  const todayKey = todayStr();
+  for (let w = 0; w < 15; w++) {
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(start);
+      day.setDate(start.getDate() + w * 7 + d);
+      const el = document.createElement('i');
+      if (day > now) { el.className = 'future'; grid.appendChild(el); continue; }
+      const key = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
+      const n = stats[key] || 0;
+      total += n;
+      el.className = n === 0 ? 'lv0' : n <= 2 ? 'lv1' : n <= 4 ? 'lv2' : 'lv3';
+      el.title = (day.getMonth() + 1) + '月' + day.getDate() + '日 · 出炉 ' + n + ' 块';
+      if (key === todayKey) el.style.outline = '1.5px solid var(--accent)';
+      grid.appendChild(el);
+    }
+  }
+  $('#calTotal').textContent = '近 15 周共 ' + total + ' 块';
 }
 
 /* ============================================================
@@ -1070,6 +1156,8 @@ function toggleTheme() {
   Store.save();
   applyTheme();
   PipUI.render();
+  Pomodoro._lastPush = 0;
+  Pomodoro.pushState();
 }
 
 /* ============================================================

@@ -57,7 +57,26 @@ body.break .track i { background: linear-gradient(90deg, var(--green-2), var(--g
   background: #FF453A; flex-shrink: 0;
   box-shadow: 0 0 6px currentColor;
   transition: background .3s;
+  app-region: no-drag; -webkit-app-region: no-drag;
 }
+
+/* ---------- 浅色主题（跟随主窗口） ---------- */
+body[data-theme="light"] .win {
+  background: linear-gradient(165deg, rgba(255,255,255,.9), rgba(244,241,236,.94));
+  border-color: rgba(60,50,40,.1);
+  box-shadow: 0 12px 40px rgba(120,90,50,.2);
+}
+body[data-theme="light"] .win::before {
+  background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.2), transparent 65%);
+}
+body[data-theme="light"] #taskText { color: #7A756E; }
+body[data-theme="light"] .track { background: rgba(0,0,0,.09); }
+body[data-theme="light"] .btns button {
+  background: rgba(0,0,0,.05);
+  border-color: rgba(0,0,0,.09);
+  color: #8A857E;
+}
+body[data-theme="light"] .btns button:hover { background: rgba(0,0,0,.1); color: #221E1A; }
 .time-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .time {
   font-size: 36px; font-weight: 250; letter-spacing: -0.03em; line-height: 1.1;
@@ -154,7 +173,10 @@ function applyState(j) {
     if (prevMode === 'work' && j.mode === 'break') Sound.workDone();
     else if (prevMode === 'break' && j.mode === 'work') Sound.breakDone();
   }
-  if (j) prevMode = j.mode;
+  if (j) {
+    prevMode = j.mode;
+    document.body.dataset.theme = j.theme === 'light' ? 'light' : 'dark';
+  }
   remote = j;
   offline = !j;
   if (j) { dispTotal = j.total || 1; dispMode = j.mode; }
