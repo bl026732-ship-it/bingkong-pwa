@@ -9,10 +9,10 @@
       "../pip.html",
       "../icons"
     ],
-    "devUrl": "http://localhost:8520",
-    "withGlobalTauri": true
+    "devUrl": "http://localhost:8520"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "pip",
