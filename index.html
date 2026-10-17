@@ -240,19 +240,24 @@ body::after {
 .task-item.done .task-check { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: #241300; animation: checkPop 340ms var(--ease); }
 .task-text { flex: 1; font-size: var(--font-body); transition: color 200ms var(--ease); word-break: break-all; }
 .task-item.done .task-text { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-2) 55%, transparent); }
-.pomo-track { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.pomo-track { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .pomo-dots { display: inline-flex; gap: 3px; }
-.pomo-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--track); transition: background 250ms var(--ease); }
+.pomo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--track); transition: background 250ms var(--ease); }
 .pomo-dot.on { background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 6px var(--glow); }
 .pomo-more { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 1px; }
 .pomo-pm {
-  width: 18px; height: 18px; border-radius: 6px; line-height: 1;
-  font-size: 13px; color: var(--text-2); opacity: .3;
+  width: 22px; height: 22px; border-radius: 7px; line-height: 1;
+  font-size: 14px; color: var(--text-2); opacity: .55;
   display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
   transition: all 150ms var(--ease);
 }
-.task-item:hover .pomo-pm { opacity: .75; }
-.pomo-pm:hover { opacity: 1; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.task-item:hover .pomo-pm { opacity: .9; }
+.pomo-pm:hover {
+  opacity: 1; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .task-del {
   width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -810,7 +815,7 @@ const Tasks = {
       if (this.view === 'daily') this.backToPool(t.id); else this.toToday(t.id);
     });
     $$('.pomo-pm', li).forEach(b => b.addEventListener('click', () => {
-      const cur = Store.data.tasks.find(x => x.id === id);
+      const cur = Store.data.tasks.find(x => x.id === t.id);
       if (!cur) return;
       cur.targetPomos = Math.max(1, Math.min(12, (cur.targetPomos || 1) + Number(b.dataset.pm)));
       Store.save();

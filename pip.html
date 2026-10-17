@@ -29,6 +29,7 @@ body {
   gap: 4px; padding: 10px 16px 12px;
   overflow: hidden;
   animation: fadeIn .35s ease;
+  app-region: drag; -webkit-app-region: drag;
 }
 @keyframes fadeIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 .win::before {
@@ -68,7 +69,7 @@ body.break .time {
   background: linear-gradient(120deg, #C9F7D4, var(--green-2) 50%, var(--green));
   -webkit-background-clip: text; background-clip: text;
 }
-.btns { display: flex; gap: 6px; opacity: 0; transition: opacity .2s; flex-shrink: 0; }
+.btns { display: flex; gap: 6px; opacity: 0; transition: opacity .2s; flex-shrink: 0; app-region: no-drag; -webkit-app-region: no-drag; }
 body:hover .btns { opacity: 1; }
 .btns button {
   width: 26px; height: 26px; border-radius: 8px;
@@ -77,6 +78,7 @@ body:hover .btns { opacity: 1; }
   color: #C9C9CF; font-size: 12px; cursor: pointer;
   font-family: inherit;
   transition: all .15s;
+  app-region: no-drag; -webkit-app-region: no-drag;
 }
 .btns button:hover { background: rgba(255,255,255,.15); color: #fff; }
 #closeBtn:hover { background: rgba(255,69,58,.28); color: #FF6B61; border-color: transparent; }
@@ -111,6 +113,35 @@ const isTauri = !!(window.__TAURI__ && window.__TAURI__.event);
 let remote = null;
 let offline = true;
 let dispRemaining = 0, dispTotal = 1, dispMode = 'work';
+let prevMode = null;
+
+/* 完成提醒音（Web Audio，无外部文件） */
+const Sound = {
+  _ctx: null,
+  _ensure() {
+    if (!this._ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) this._ctx = new AC();
+    }
+    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume();
+    return this._ctx;
+  },
+  _tone(freq, start, dur) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+    gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + start + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime + start);
+    osc.stop(ctx.currentTime + start + dur + 0.05);
+  },
+  workDone() { if (this._ensure()) { this._tone(880, 0, 0.25); this._tone(1174.7, 0.28, 0.4); } },
+  breakDone() { if (this._ensure()) { this._tone(587.3, 0, 0.25); this._tone(880, 0.28, 0.4); } }
+};
 
 function fmt(s) {
   s = Math.max(0, s | 0);
@@ -118,6 +149,12 @@ function fmt(s) {
 }
 
 function applyState(j) {
+  /* 模式翻转 = 一轮结束 → 播对应提示音 */
+  if (j && prevMode && prevMode !== j.mode) {
+    if (prevMode === 'work' && j.mode === 'break') Sound.workDone();
+    else if (prevMode === 'break' && j.mode === 'work') Sound.breakDone();
+  }
+  if (j) prevMode = j.mode;
   remote = j;
   offline = !j;
   if (j) { dispTotal = j.total || 1; dispMode = j.mode; }
