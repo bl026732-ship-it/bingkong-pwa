@@ -493,6 +493,51 @@ body::after {
 .cal-cell.lv1 { background: color-mix(in srgb, var(--accent) 9%, var(--card)); }
 .cal-cell.lv2 { background: color-mix(in srgb, var(--accent) 17%, var(--card)); }
 .cal-cell.lv3 { background: color-mix(in srgb, var(--accent) 26%, var(--card)); }
+
+/* ---------- 底部三把手 ---------- */
+.dock-row {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+  z-index: 150;
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  animation: rise 560ms var(--ease) both;
+}
+.dock-row .dock { position: static; transform: none; animation: none; }
+.dock-row .dock:hover { transform: translateY(-2px); }
+
+/* ---------- 烤饼轨迹（折线图） ---------- */
+.trend-ranges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+.trend-ranges .chip.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: #241300; font-weight: 600; }
+.trend-body { min-height: 220px; }
+.trend-body svg { width: 100%; height: auto; display: block; }
+.trend-body .t-grid { stroke: var(--card-border); stroke-width: 1; }
+.trend-body .t-axis { fill: var(--text-2); font-size: 10px; }
+.trend-body .t-line { stroke: url(#trendStroke); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.trend-body .t-dot { fill: var(--accent-2); stroke: var(--bg); stroke-width: 2; cursor: default; }
+.trend-body .t-dot.today { fill: var(--accent); stroke: #fff; stroke-width: 2.5; }
+.trend-empty { text-align: center; color: var(--text-2); font-size: var(--font-sm); padding: 60px 0; }
+
+/* ---------- 领导画饼（愿景板） ---------- */
+.pie-list { display: flex; flex-direction: column; gap: 10px; max-height: 46vh; overflow-y: auto; margin-bottom: 6px; }
+.pie-item {
+  display: flex; align-items: flex-start; gap: 13px;
+  padding: 15px 17px; border-radius: 16px;
+  background: var(--card); border: 1px solid var(--card-border);
+  animation: taskIn 260ms var(--ease);
+}
+.pie-emoji { font-size: 22px; line-height: 1.3; }
+.pie-body { flex: 1; min-width: 0; }
+.pie-text { font-size: 16px; font-weight: 600; line-height: 1.5; word-break: break-all; }
+.pie-date { font-size: 11px; color: var(--text-2); margin-top: 4px; }
+.pie-del {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-2); opacity: 0; transition: all 150ms var(--ease);
+}
+.pie-item:hover .pie-del { opacity: 1; }
+.pie-del:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.pie-empty { text-align: center; color: var(--text-2); font-size: var(--font-sm); padding: 44px 0 36px; line-height: 2.2; }
+.pie-empty .big { font-size: 40px; display: block; }
+.pie-input-row { display: flex; gap: 10px; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -561,19 +606,32 @@ body::after {
 </main>
 
 <footer class="foot">
-  <button class="dock" id="calDock" title="打开烤饼日历">
-    <span class="dock-title">🍪 烤饼日历</span>
-    <span class="dock-heat" id="dockHeat"></span>
-    <span class="dock-total" id="dockTotal"></span>
-    <span class="dock-arrow">▲</span>
-  </button>
+  <div class="dock-row">
+    <button class="dock" id="calDock" title="打开烤饼日历">
+      <span class="dock-title">🍪 烤饼日历</span>
+      <span class="dock-heat" id="dockHeat"></span>
+      <span class="dock-total" id="dockTotal"></span>
+      <span class="dock-arrow">▲</span>
+    </button>
+    <button class="dock" id="trendDock" title="打开烤饼轨迹">
+      <span class="dock-title">📈 烤饼轨迹</span>
+      <span class="dock-total" id="dockTrendMini"></span>
+      <span class="dock-arrow">▲</span>
+    </button>
+    <button class="dock" id="pieDock" title="打开领导画饼">
+      <span class="dock-title">🎯 领导画饼</span>
+      <span class="dock-total" id="dockPieMini"></span>
+      <span class="dock-arrow">▲</span>
+    </button>
+  </div>
 </footer>
 
 <div class="cal-mask" id="calMask" hidden></div>
+
 <div class="cal-sheet" id="calSheet">
   <div class="cal-sheet-head">
     <div class="cal-sheet-title">🍪 烤饼日历 <small>每天出炉的饼干数</small></div>
-    <button class="cal-close" id="calClose" title="收起">✕</button>
+    <button class="cal-close sheet-close" title="收起">✕</button>
   </div>
   <div class="cal-month">
     <button class="cal-nav" id="calPrev" title="上个月">‹</button>
@@ -582,6 +640,32 @@ body::after {
   </div>
   <div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
   <div class="cal-month-grid" id="calMonthGrid"></div>
+</div>
+
+<div class="cal-sheet" id="trendSheet">
+  <div class="cal-sheet-head">
+    <div class="cal-sheet-title">📈 烤饼轨迹 <small>每天出炉的饼干数</small></div>
+    <button class="cal-close sheet-close" title="收起">✕</button>
+  </div>
+  <div class="trend-ranges">
+    <button class="chip active" data-range="7">近一周</button>
+    <button class="chip" data-range="15">近 15 天</button>
+    <button class="chip" data-range="30">近一个月</button>
+    <button class="chip" data-range="90">近一季度</button>
+  </div>
+  <div class="trend-body" id="trendBody"></div>
+</div>
+
+<div class="cal-sheet" id="pieSheet">
+  <div class="cal-sheet-head">
+    <div class="cal-sheet-title">🎯 领导画饼 <small>先画着，万一实现了呢</small></div>
+    <button class="cal-close sheet-close" title="收起">✕</button>
+  </div>
+  <div class="pie-list" id="pieList"></div>
+  <div class="pie-input-row">
+    <input class="task-input" id="pieInput" placeholder="给自己画个饼：考研上岸、瘦 20 斤、存款 10 万…" maxlength="60">
+    <button class="btn-primary" id="pieAddBtn">画个饼</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -630,6 +714,7 @@ const Store = {
       version: 4,
       settings: { workMinutes: 25, breakMinutes: DEFAULT_BREAK, theme: 'auto' },
       tasks: [],
+      pies: [],
       stats: { dailyTomatoes: {}, dailyMinutes: {} }
     };
   },
@@ -643,6 +728,7 @@ const Store = {
         if (!n.targetPomos) n.targetPomos = Math.max(1, n.pomos || 1);
         return n;
       }) : [],
+      pies: Array.isArray(d.pies) ? d.pies : [],
       stats: {
         dailyTomatoes: (d.stats && d.stats.dailyTomatoes) || {},
         dailyMinutes: (d.stats && d.stats.dailyMinutes) || {}
@@ -1182,6 +1268,14 @@ function renderStats() {
   $('#statTomatoes').textContent = d.dailyTomatoes[date] || 0;
   $('#statMinutes').textContent = d.dailyMinutes[date] || 0;
   renderDockHeat();
+  let week = 0;
+  const now0 = new Date();
+  for (let i = 0; i < 7; i++) {
+    const dd = new Date(now0);
+    dd.setDate(now0.getDate() - i);
+    week += d.dailyTomatoes[dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') + '-' + String(dd.getDate()).padStart(2, '0')] || 0;
+  }
+  $('#dockTrendMini').textContent = week > 0 ? '7天 ' + week + ' 块' : '';
 }
 
 /* ---------- 烤饼日历：底部把手预览（最近 14 天迷你热力） ---------- */
@@ -1203,7 +1297,45 @@ function renderDockHeat() {
   }
 }
 
-/* ---------- 烤饼日历：月历抽屉 ---------- */
+/* ---------- 通用底部抽屉：三选一 ---------- */
+const Sheets = {
+  _all: ['calSheet', 'trendSheet', 'pieSheet'],
+  current: null,
+
+  init() {
+    $('#calDock').addEventListener('click', () => this.toggle('calSheet'));
+    $('#trendDock').addEventListener('click', () => this.toggle('trendSheet'));
+    $('#pieDock').addEventListener('click', () => this.toggle('pieSheet'));
+    $$('.sheet-close').forEach(b => b.addEventListener('click', () => this.closeAll()));
+    $('#calMask').addEventListener('click', () => this.closeAll());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && this.current) this.closeAll();
+    });
+  },
+
+  toggle(id) {
+    if (this.current === id) { this.closeAll(); return; }
+    this.closeAll();
+    this.current = id;
+    $('#calMask').hidden = false;
+    requestAnimationFrame(() => {
+      $('#calMask').classList.add('show');
+      $('#' + id).classList.add('show');
+    });
+    if (id === 'calSheet') Cal.render();
+    if (id === 'trendSheet') Trend.render();
+    if (id === 'pieSheet') Pies.render();
+  },
+
+  closeAll() {
+    this.current = null;
+    $('#calMask').classList.remove('show');
+    this._all.forEach(s => $('#' + s).classList.remove('show'));
+    setTimeout(() => { if (!this.current) $('#calMask').hidden = true; }, 320);
+  }
+};
+
+/* ---------- 烤饼日历：月历 ---------- */
 const MONTH_CN = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
 const Cal = {
   view: null,   // 正在查看的月份（Date，日固定为 1）
@@ -1211,30 +1343,9 @@ const Cal = {
   init() {
     const now = new Date();
     this.view = new Date(now.getFullYear(), now.getMonth(), 1);
-    $('#calDock').addEventListener('click', () => this.open());
-    $('#calClose').addEventListener('click', () => this.close());
-    $('#calMask').addEventListener('click', () => this.close());
-    $('#calPrev').addEventListener('click', () => { this.shift(-1); });
-    $('#calNext').addEventListener('click', () => { this.shift(1); });
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && $('#calSheet').classList.contains('show')) this.close();
-    });
+    $('#calPrev').addEventListener('click', () => this.shift(-1));
+    $('#calNext').addEventListener('click', () => this.shift(1));
     this.render();
-  },
-
-  open() {
-    $('#calMask').hidden = false;
-    requestAnimationFrame(() => {
-      $('#calMask').classList.add('show');
-      $('#calSheet').classList.add('show');
-    });
-    this.render();
-  },
-
-  close() {
-    $('#calMask').classList.remove('show');
-    $('#calSheet').classList.remove('show');
-    setTimeout(() => { $('#calMask').hidden = true; }, 320);
   },
 
   shift(delta) {
@@ -1282,6 +1393,127 @@ const Cal = {
   }
 };
 
+/* ---------- 烤饼轨迹：折线图（纯 SVG，零依赖） ---------- */
+const Trend = {
+  range: 7,
+
+  init() {
+    $$('.trend-ranges .chip').forEach(b => b.addEventListener('click', () => {
+      this.range = Number(b.dataset.range);
+      $$('.trend-ranges .chip').forEach(x => x.classList.toggle('active', x === b));
+      this.render();
+    }));
+  },
+
+  render() {
+    const body = $('#trendBody');
+    const stats = Store.data.stats.dailyTomatoes || {};
+    const now = new Date();
+    const days = this.range;
+    const data = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      data.push({ label: (d.getMonth() + 1) + '/' + d.getDate(), n: stats[key] || 0, today: i === 0 });
+    }
+    const total = data.reduce((s, x) => s + x.n, 0);
+
+    const W = 720, H = 230, padL = 36, padR = 14, padT = 16, padB = 30;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const max = Math.max(3, Math.max.apply(null, data.map(x => x.n)));
+    const stepX = days > 1 ? iw / (days - 1) : 0;
+    const X = i => padL + i * stepX;
+    const Y = n => padT + ih - (n / max) * ih;
+
+    let grid = '';
+    for (let g = 0; g <= 4; g++) {
+      const val = Math.round(max * g / 4);
+      const gy = Y(val).toFixed(1);
+      grid += '<line class="t-grid" x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '"/>' +
+              '<text class="t-axis" x="' + (padL - 8) + '" y="' + (parseFloat(gy) + 3) + '" text-anchor="end">' + val + '</text>';
+    }
+
+    const pts = data.map((x, i) => X(i).toFixed(1) + ',' + Y(x.n).toFixed(1));
+    const base = (padT + ih).toFixed(1);
+    const areaD = 'M ' + pts[0] + ' L ' + pts.join(' L ') +
+      ' L ' + X(days - 1).toFixed(1) + ' ' + base + ' L ' + X(0).toFixed(1) + ' ' + base + ' Z';
+
+    let dots = '', labels = '';
+    const every = Math.ceil(days / 8);
+    data.forEach((x, i) => {
+      dots += '<circle class="t-dot' + (x.today ? ' today' : '') + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(x.n).toFixed(1) +
+        '" r="' + (x.today ? 5.5 : 3.8) + '"><title>' + x.label + ' · ' + x.n + ' 块</title></circle>';
+      if (i % every === 0 || x.today) {
+        labels += '<text class="t-axis" x="' + X(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + x.label + '</text>';
+      }
+    });
+
+    const defs = '<defs>' +
+      '<linearGradient id="trendStroke" x1="0" y1="0" x2="1" y2="0">' +
+      '<stop offset="0%" stop-color="#FFB340"/><stop offset="100%" stop-color="#FF7A00"/></linearGradient>' +
+      '<linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#FFB340" stop-opacity=".32"/><stop offset="100%" stop-color="#FFB340" stop-opacity="0"/></linearGradient>' +
+      '</defs>';
+
+    body.innerHTML = total === 0
+      ? '<div class="trend-empty">这段时间还没有出炉记录<br>烤一块饼干就有了 📈</div>'
+      : '<svg viewBox="0 0 ' + W + ' ' + H + '">' + defs + grid +
+        '<path d="' + areaD + '" fill="url(#trendFill)"/>' +
+        '<polyline class="t-line" points="' + pts.join(' ') + '"/>' + dots + labels + '</svg>';
+  }
+};
+
+/* ---------- 领导画饼：愿景板 ---------- */
+const Pies = {
+  init() {
+    $('#pieAddBtn').addEventListener('click', () => this.add());
+    $('#pieInput').addEventListener('keydown', e => { if (e.key === 'Enter') this.add(); });
+    this.render();
+  },
+
+  render() {
+    const list = $('#pieList');
+    list.innerHTML = '';
+    const pies = Store.data.pies || [];
+    $('#dockPieMini').textContent = pies.length > 0 ? pies.length + ' 个饼' : '';
+    if (pies.length === 0) {
+      list.innerHTML = '<div class="pie-empty"><span class="big">🫓</span>还没给自己画过饼<br>画一个「考研上岸」试试？</div>';
+      return;
+    }
+    pies.slice().reverse().forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'pie-item';
+      const d = new Date(p.createdAt || Date.now());
+      div.innerHTML =
+        '<span class="pie-emoji">🎯</span>' +
+        '<div class="pie-body"><div class="pie-text">' + escapeHtml(p.text) + '</div>' +
+        '<div class="pie-date">画于 ' + (d.getMonth() + 1) + '月' + d.getDate() + '日</div></div>' +
+        '<button class="pie-del" title="吃掉这个饼">✕</button>';
+      div.querySelector('.pie-del').addEventListener('click', () => this.remove(p.id));
+      list.appendChild(div);
+    });
+  },
+
+  add() {
+    const input = $('#pieInput');
+    const text = input.value.trim();
+    if (!text) return;
+    Store.data.pies.push({ id: genId('p_'), text, createdAt: Date.now() });
+    Store.save();
+    input.value = '';
+    input.focus();
+    this.render();
+    Toast.show('🫓 饼已画好，慢慢实现它');
+  },
+
+  remove(id) {
+    Store.data.pies = Store.data.pies.filter(x => x.id !== id);
+    Store.save();
+    this.render();
+  }
+};
+
 /* ============================================================
    主题
    ============================================================ */
@@ -1308,7 +1540,10 @@ applyTheme();
 Tasks.init();
 Pomodoro.init();
 renderStats();
+Sheets.init();
 Cal.init();
+Trend.init();
+Pies.init();
 
 $('#themeBtn').addEventListener('click', toggleTheme);
 $('#pipBtn').addEventListener('click', () => {
