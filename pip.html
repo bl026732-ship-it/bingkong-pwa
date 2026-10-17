@@ -40,25 +40,22 @@ body.break .win::before {
 }
 .track { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.08); }
 .track i {
-  display: block; height: 100%; width: 100%;
+  display: block; height: 100%; width: 0;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   transition: width .5s linear;
 }
 body.break .track i { background: linear-gradient(90deg, var(--green-2), var(--green)); }
-.task-row { position: relative; display: flex; align-items: center; min-height: 20px; }
+.task-row { position: relative; display: flex; align-items: center; gap: 6px; min-height: 20px; }
 #taskText {
   font-size: 11px; color: #B9B9C0;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  cursor: text; border-radius: 6px; padding: 2px 6px; margin-left: -6px;
-  transition: all .15s;
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#taskText:hover { background: rgba(255,255,255,.08); color: #E8E8EE; }
 #taskText.empty { color: #6A6A72; }
-#taskInput {
-  font-family: inherit; font-size: 11px; color: #F2F2F5;
-  background: rgba(255,255,255,.08);
-  border: 1px solid var(--accent); border-radius: 6px; outline: none;
-  padding: 2px 6px; width: 100%; user-select: text; -webkit-user-select: text;
+#dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #FF453A; flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+  transition: background .3s;
 }
 .time-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .time {
@@ -71,7 +68,6 @@ body.break .time {
   background: linear-gradient(120deg, #C9F7D4, var(--green-2) 50%, var(--green));
   -webkit-background-clip: text; background-clip: text;
 }
-body.paused .time { opacity: .35; }
 .btns { display: flex; gap: 6px; opacity: 0; transition: opacity .2s; flex-shrink: 0; }
 body:hover .btns { opacity: 1; }
 .btns button {
@@ -90,14 +86,12 @@ body:hover .btns { opacity: 1; }
 <div class="win">
   <div class="track"><i id="fill"></i></div>
   <div class="task-row">
-    <span id="taskText" class="empty">点击输入当前任务…</span>
-    <input id="taskInput" hidden maxlength="60">
+    <span id="taskText">连接主应用中…</span>
+    <span id="dot" title="与主应用的连接状态"></span>
   </div>
   <div class="time-row" data-tauri-drag-region>
-    <div class="time" id="time">25:00</div>
+    <div class="time" id="time">--:--</div>
     <div class="btns">
-      <button id="pauseBtn" title="暂停 / 继续">⏸</button>
-      <button id="resetBtn" title="重置">↺</button>
       <button id="closeBtn" title="关闭">✕</button>
     </div>
   </div>
@@ -105,160 +99,62 @@ body:hover .btns { opacity: 1; }
 
 <script>
 'use strict';
-const WORK = 25 * 60, BREAK = 5 * 60;
-const KEY = 'bingkong_pip_state';
+/* 镜像模式：本窗口不再自己计时，实时显示主应用（localhost:8520）推送的专注状态 */
 const $ = s => document.querySelector(s);
+const API = 'http://localhost:8520/api/focus';
+let remote = null;      // 主应用最近一次推送的状态
+let offline = true;
+let dispRemaining = 0, dispTotal = 1, dispMode = 'work';
 
-let state = load();
-
-function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const s = Object.assign({ task: '', mode: 'work', total: WORK, remaining: WORK, running: false, tickAt: 0 }, JSON.parse(raw));
-      // 恢复中断的计时（按真实时间校正）
-      if (s.running && s.tickAt) {
-        s.remaining = Math.max(0, Math.round((s.tickAt - Date.now()) / 1000));
-        if (s.remaining <= 0) { s.running = false; s.remaining = s.total; s.mode = 'work'; }
-      }
-      return s;
-    }
-  } catch (e) { /* 忽略损坏数据 */ }
-  return { task: '', mode: 'work', total: WORK, remaining: WORK, running: false, tickAt: 0 };
-}
-function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
-}
 function fmt(s) {
+  s = Math.max(0, s | 0);
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 }
 
-/* 提示音（Web Audio，无外部文件） */
-const Sound = {
-  _ctx: null,
-  _ensure() {
-    if (!this._ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) this._ctx = new AC();
+async function poll() {
+  try {
+    const r = await fetch(API, { cache: 'no-store' });
+    if (!r.ok) throw new Error('bad response');
+    const j = await r.json();
+    remote = j;
+    offline = !j;
+    if (j) { dispTotal = j.total || 1; dispMode = j.mode; }
+  } catch (e) { offline = true; }
+  renderTask();
+}
+
+function renderTask() {
+  $('#dot').style.background = offline ? '#FF453A' : '#30D158';
+  const el = $('#taskText');
+  if (offline) { el.textContent = '主应用未连接（打开 localhost:8520）'; el.className = 'empty'; return; }
+  if (remote.task) { el.textContent = (remote.mode === 'break' ? '☕ ' : '') + remote.task; el.className = ''; }
+  else if (remote.mode === 'break') { el.textContent = '☕ 烤炉保温中'; el.className = ''; }
+  else { el.textContent = '自由专注'; el.className = 'empty'; }
+}
+
+function loop() {
+  if (!offline && remote) {
+    if (remote.running && remote.tickAt) {
+      dispRemaining = Math.max(0, Math.round((remote.tickAt - Date.now()) / 1000));
+    } else {
+      dispRemaining = remote.remaining;
     }
-    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume();
-    return this._ctx;
-  },
-  _tone(freq, start, dur) {
-    const ctx = this._ctx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
-    gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + start + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(ctx.currentTime + start);
-    osc.stop(ctx.currentTime + start + dur + 0.05);
-  },
-  workDone() { if (this._ensure()) { this._tone(880, 0, 0.25); this._tone(1174.7, 0.28, 0.4); } },
-  breakDone() { if (this._ensure()) { this._tone(587.3, 0, 0.25); this._tone(880, 0.28, 0.4); } }
-};
-
-let timer = null;
-
-function render() {
-  $('#time').textContent = fmt(state.remaining);
-  $('#fill').style.width = (state.remaining / state.total * 100) + '%';
-  document.body.classList.toggle('break', state.mode === 'break');
-  document.body.classList.toggle('paused', !state.running && state.remaining < state.total);
-  $('#pauseBtn').textContent = state.running ? '⏸' : '▶';
-  document.title = (state.running ? fmt(state.remaining) + ' · ' : '') + '饼控悬浮窗';
-  save();
-}
-
-function tick() {
-  if (!state.running) return;
-  const left = state.tickAt - Date.now();
-  state.remaining = Math.max(0, Math.round(left / 1000));
-  if (left <= 0) { complete(); return; }
-  render();
-}
-
-function start() {
-  Sound._ensure();
-  state.running = true;
-  state.tickAt = Date.now() + state.remaining * 1000;
-  clearInterval(timer);
-  timer = setInterval(tick, 250);
-  render();
-}
-function pause() {
-  state.running = false;
-  clearInterval(timer);
-  render();
-}
-function reset() {
-  state.running = false;
-  clearInterval(timer);
-  state.mode = 'work';
-  state.total = state.remaining = WORK;
-  render();
-}
-function complete() {
-  clearInterval(timer);
-  state.running = false;
-  if (state.mode === 'work') {
-    Sound.workDone();
-    state.mode = 'break';
-    state.total = state.remaining = BREAK;
-    render();
-    start();           // 自动进入休息
-  } else {
-    Sound.breakDone();
-    state.mode = 'work';
-    state.total = state.remaining = WORK;
-    render();
   }
+  $('#time').textContent = offline ? '--:--' : fmt(dispRemaining);
+  $('#fill').style.width = (offline ? 0 : dispRemaining / (dispTotal || 1) * 100) + '%';
+  document.body.classList.toggle('break', !offline && dispMode === 'break');
+  document.title = (!offline && remote && remote.running ? fmt(dispRemaining) + ' · ' : '') + '饼控悬浮窗';
 }
 
-/* 任务名：点击文本进入编辑 */
-const taskText = $('#taskText'), taskInput = $('#taskInput');
-function syncTask() {
-  taskText.textContent = state.task || '点击输入当前任务…';
-  taskText.classList.toggle('empty', !state.task);
-}
-taskText.addEventListener('click', () => {
-  taskInput.value = state.task;
-  taskText.hidden = true;
-  taskInput.hidden = false;
-  taskInput.focus();
-  taskInput.select();
-});
-function commitTask() {
-  state.task = taskInput.value.trim();
-  taskInput.hidden = true;
-  taskText.hidden = false;
-  syncTask();
-  save();
-}
-taskInput.addEventListener('blur', commitTask);
-taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') taskInput.blur(); });
-
-/* 按钮 */
-$('#pauseBtn').addEventListener('click', () => { state.running ? pause() : start(); });
-$('#resetBtn').addEventListener('click', reset);
 $('#closeBtn').addEventListener('click', () => {
-  save();
   try { window.__TAURI__.window.getCurrentWindow().close(); }
   catch (e) { window.close(); }
 });
 
-window.addEventListener('pagehide', save);
-
-/* 启动 */
-syncTask();
-render();
-if (state.running) {
-  state.tickAt = Date.now() + state.remaining * 1000;
-  timer = setInterval(tick, 250);
-}
+poll();
+setInterval(poll, 1500);
+setInterval(loop, 500);
+loop();
 </script>
 </body>
 </html>

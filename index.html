@@ -919,6 +919,8 @@ const Pomodoro = {
     $('#ringLabel').innerHTML = t ? '正在烤：<b>' + escapeHtml(t.title) + '</b>' : '自由专注';
     this.syncTaskUI();
     PipUI.render();
+    this._lastPush = 0;
+    this.pushState();
   },
 
   syncTaskUI() {
@@ -1005,6 +1007,31 @@ const Pomodoro = {
       $('#startBtn').textContent = this.running ? '暂停休息' : (this.remaining < this.total ? '继续休息' : '开始休息');
     }
     PipUI.render();
+    this.pushState();
+  },
+
+  /* 把当前专注状态推给本地服务器桥（桌面悬浮窗读取），仅本地运行时生效 */
+  pushState() {
+    if (!/^(localhost|127\.0\.0\.1):8520$/.test(location.host)) return;
+    if (this._lastPush && Date.now() - this._lastPush < 900) return;
+    this._lastPush = Date.now();
+    const t = Store.data.tasks.find(x => x.id === this.taskId);
+    try {
+      fetch('/api/focus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: t ? t.title : null,
+          pomos: t ? t.pomos || 0 : 0,
+          target: t ? Math.max(1, t.targetPomos || 1) : 0,
+          mode: this.mode,
+          total: this.total,
+          remaining: this.remaining,
+          running: this.running,
+          tickAt: this.running ? this._tickAt : 0
+        })
+      }).catch(() => {});
+    } catch (e) { /* 静默 */ }
   }
 };
 

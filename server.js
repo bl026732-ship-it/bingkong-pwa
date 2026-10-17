@@ -14,8 +14,31 @@ const MIME = {
   '.css': 'text/css; charset=utf-8'
 };
 
+/* 悬浮窗状态桥：主应用推送当前专注状态，桌面悬浮窗轮询读取（跨域开放给本机悬浮窗） */
+let focusState = null;
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type'
+};
+
 http.createServer((req, res) => {
+  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); res.end(); return; }
+
   let p = decodeURIComponent(req.url.split('?')[0]);
+
+  if (p === '/api/focus') {
+    if (req.method === 'GET') {
+      res.writeHead(200, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, CORS));
+      res.end(focusState || 'null');
+    } else if (req.method === 'POST') {
+      let body = '';
+      req.on('data', c => { body += c; });
+      req.on('end', () => { focusState = body; res.writeHead(200, CORS); res.end('ok'); });
+    } else { res.writeHead(405, CORS); res.end(); }
+    return;
+  }
+
   if (p === '/' || p === '') p = '/index.html';
   const file = path.join(ROOT, p);
   if (!file.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
