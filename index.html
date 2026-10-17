@@ -498,10 +498,12 @@ body::after {
 .dock-row {
   position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
   z-index: 150;
-  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  display: flex; gap: 8px; flex-wrap: nowrap;
   animation: rise 560ms var(--ease) both;
 }
-.dock-row .dock { position: static; transform: none; animation: none; }
+.dock-row .dock { position: static; transform: none; animation: none; white-space: nowrap; }
 .dock-row .dock:hover { transform: translateY(-2px); }
 
 /* ---------- 烤饼轨迹（折线图） ---------- */
@@ -1285,7 +1287,7 @@ function renderDockHeat() {
   el.innerHTML = '';
   const stats = Store.data.stats.dailyTomatoes || {};
   const now = new Date();
-  for (let i = 13; i >= 0; i--) {
+  for (let i = 15; i >= 0; i--) {
     const day = new Date(now);
     day.setDate(now.getDate() - i);
     const key = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
