@@ -1,5 +1,26 @@
+/* 切换悬浮窗显示/隐藏；首次显示时定位到主显示器右上角 */
+fn toggle_pip(handle: &tauri::AppHandle) {
+  use tauri::Manager;
+  if let Some(w) = handle.get_webview_window("pip") {
+    if w.is_visible().unwrap_or(false) {
+      let _ = w.hide();
+    } else {
+      if let Ok(Some(monitor)) = w.current_monitor() {
+        let mpos = monitor.position();
+        let msize = monitor.size();
+        if let Ok(size) = w.outer_size() {
+          let x = mpos.x + msize.width as i32 - size.width as i32 - 16;
+          let _ = w.set_position(tauri::PhysicalPosition::new(x.max(mpos.x), mpos.y + 16));
+        }
+      }
+      let _ = w.show();
+    }
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  use tauri::Listener;
   tauri::Builder::default()
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -10,20 +31,11 @@ pub fn run() {
         )?;
       }
 
-      // 悬浮窗：定位到主显示器右上角后再显示（避免闪现默认位置）
-      use tauri::Manager;
-      if let Some(window) = app.get_webview_window("pip") {
-        if let Ok(Some(monitor)) = window.current_monitor() {
-          let mpos = monitor.position();
-          let msize = monitor.size();
-          if let Ok(size) = window.outer_size() {
-            let x = mpos.x + msize.width as i32 - size.width as i32 - 16;
-            let y = mpos.y + 16;
-            let _ = window.set_position(tauri::PhysicalPosition::new(x.max(mpos.x), y));
-          }
-        }
-        let _ = window.show();
-      }
+      /* 前端通过事件请求切换悬浮窗（emit('toggle-pip')），无需自定义命令权限 */
+      let handle = app.handle().clone();
+      app.listen("toggle-pip", move |_| {
+        toggle_pip(&handle);
+      });
 
       Ok(())
     })

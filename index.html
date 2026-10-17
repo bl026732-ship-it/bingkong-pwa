@@ -1010,26 +1010,31 @@ const Pomodoro = {
     this.pushState();
   },
 
-  /* 把当前专注状态推给本地服务器桥（桌面悬浮窗读取），仅本地运行时生效 */
+  /* 推送当前专注状态：Tauri 环境直接广播给悬浮窗；浏览器版走本地服务器桥 */
   pushState() {
-    if (!/^(localhost|127\.0\.0\.1):8520$/.test(location.host)) return;
     if (this._lastPush && Date.now() - this._lastPush < 900) return;
     this._lastPush = Date.now();
     const t = Store.data.tasks.find(x => x.id === this.taskId);
+    const payload = {
+      task: t ? t.title : null,
+      pomos: t ? t.pomos || 0 : 0,
+      target: t ? Math.max(1, t.targetPomos || 1) : 0,
+      mode: this.mode,
+      total: this.total,
+      remaining: this.remaining,
+      running: this.running,
+      tickAt: this.running ? this._tickAt : 0
+    };
+    if (window.__TAURI__) {
+      try { window.__TAURI__.event.emit('focus-state', payload); } catch (e) { /* 静默 */ }
+      return;
+    }
+    if (!/^(localhost|127\.0\.0\.1):8520$/.test(location.host)) return;
     try {
       fetch('/api/focus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task: t ? t.title : null,
-          pomos: t ? t.pomos || 0 : 0,
-          target: t ? Math.max(1, t.targetPomos || 1) : 0,
-          mode: this.mode,
-          total: this.total,
-          remaining: this.remaining,
-          running: this.running,
-          tickAt: this.running ? this._tickAt : 0
-        })
+        body: JSON.stringify(payload)
       }).catch(() => {});
     } catch (e) { /* 静默 */ }
   }
@@ -1068,13 +1073,27 @@ Pomodoro.init();
 renderStats();
 
 $('#themeBtn').addEventListener('click', toggleTheme);
-$('#pipBtn').addEventListener('click', () => PipUI.toggle());
+$('#pipBtn').addEventListener('click', () => {
+  if (window.__TAURI__) {
+    window.__TAURI__.event.emit('toggle-pip').catch(() => {});
+  } else {
+    PipUI.toggle();
+  }
+});
 $('#taskAddBtn').addEventListener('click', () => Tasks.add());
 $('#taskInput').addEventListener('keydown', e => { if (e.key === 'Enter') Tasks.add(); });
 
 /* PWA：注册 Service Worker（file:// 或本地开发 localhost:8520 时跳过，开发版始终加载最新代码） */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && location.host !== 'localhost:8520' && location.host !== '127.0.0.1:8520') {
   navigator.serviceWorker.register('sw.js').catch(() => { /* 忽略注册失败 */ });
+}
+
+/* Tauri 环境：悬浮窗上线时请求一次当前状态（广播可能早于悬浮窗打开） */
+if (window.__TAURI__ && window.__TAURI__.event) {
+  window.__TAURI__.event.listen('focus-request', () => {
+    Pomodoro._lastPush = 0;
+    Pomodoro.pushState();
+  });
 }
 </script>
 </body>

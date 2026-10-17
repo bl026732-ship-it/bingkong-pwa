@@ -3,9 +3,12 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "pip"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen"
   ]
 }

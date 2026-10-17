@@ -86,23 +86,25 @@ body:hover .btns { opacity: 1; }
 <div class="win">
   <div class="track"><i id="fill"></i></div>
   <div class="task-row">
-    <span id="taskText">连接主应用中…</span>
-    <span id="dot" title="与主应用的连接状态"></span>
+    <span id="taskText">等待主窗口…</span>
+    <span id="dot" title="与主窗口的连接状态"></span>
   </div>
   <div class="time-row" data-tauri-drag-region>
     <div class="time" id="time">--:--</div>
     <div class="btns">
-      <button id="closeBtn" title="关闭">✕</button>
+      <button id="closeBtn" title="收起悬浮窗">✕</button>
     </div>
   </div>
 </div>
 
 <script>
 'use strict';
-/* 镜像模式：本窗口不再自己计时，实时显示主应用（localhost:8520）推送的专注状态 */
+/* 镜像模式：实时显示主窗口广播的专注状态。
+   Tauri 环境用原生事件收听（零延迟）；浏览器兜底走 localhost:8520 轮询。 */
 const $ = s => document.querySelector(s);
 const API = 'http://localhost:8520/api/focus';
-let remote = null;      // 主应用最近一次推送的状态
+const isTauri = !!(window.__TAURI__ && window.__TAURI__.event);
+let remote = null;
 let offline = true;
 let dispRemaining = 0, dispTotal = 1, dispMode = 'work';
 
@@ -111,22 +113,17 @@ function fmt(s) {
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 }
 
-async function poll() {
-  try {
-    const r = await fetch(API, { cache: 'no-store' });
-    if (!r.ok) throw new Error('bad response');
-    const j = await r.json();
-    remote = j;
-    offline = !j;
-    if (j) { dispTotal = j.total || 1; dispMode = j.mode; }
-  } catch (e) { offline = true; }
+function applyState(j) {
+  remote = j;
+  offline = !j;
+  if (j) { dispTotal = j.total || 1; dispMode = j.mode; }
   renderTask();
 }
 
 function renderTask() {
   $('#dot').style.background = offline ? '#FF453A' : '#30D158';
   const el = $('#taskText');
-  if (offline) { el.textContent = '主应用未连接（打开 localhost:8520）'; el.className = 'empty'; return; }
+  if (offline) { el.textContent = isTauri ? '主窗口未运行' : '主应用未连接（打开 localhost:8520）'; el.className = 'empty'; return; }
   if (remote.task) { el.textContent = (remote.mode === 'break' ? '☕ ' : '') + remote.task; el.className = ''; }
   else if (remote.mode === 'break') { el.textContent = '☕ 烤炉保温中'; el.className = ''; }
   else { el.textContent = '自由专注'; el.className = 'empty'; }
@@ -146,13 +143,33 @@ function loop() {
   document.title = (!offline && remote && remote.running ? fmt(dispRemaining) + ' · ' : '') + '饼控悬浮窗';
 }
 
+/* ✕ = 收起悬浮窗（应用还在主窗口里跑着） */
 $('#closeBtn').addEventListener('click', () => {
-  try { window.__TAURI__.window.getCurrentWindow().close(); }
-  catch (e) { window.close(); }
+  if (isTauri) {
+    window.__TAURI__.event.emit('toggle-pip').catch(() => {});
+  } else {
+    window.close();
+  }
 });
 
-poll();
-setInterval(poll, 1500);
+if (isTauri) {
+  /* 收听主窗口广播 */
+  window.__TAURI__.event.listen('focus-state', (e) => { applyState(e.payload); });
+  /* 上线即请求一次当前状态（广播可能早于本窗口打开） */
+  window.__TAURI__.event.emit('focus-request').catch(() => {});
+} else {
+  /* 浏览器兜底：轮询本地服务器 */
+  async function poll() {
+    try {
+      const r = await fetch(API, { cache: 'no-store' });
+      if (!r.ok) throw new Error('bad response');
+      applyState(await r.json());
+    } catch (e) { applyState(null); }
+  }
+  poll();
+  setInterval(poll, 1500);
+}
+
 setInterval(loop, 500);
 loop();
 </script>
