@@ -1218,6 +1218,7 @@ const Pomodoro = {
     $('#startBtn').textContent = '暂停';
     $('#ringWrap').classList.add('running');
     this.renderTime();
+    this.pushState(true);
   },
 
   pause() {
@@ -1226,6 +1227,7 @@ const Pomodoro = {
     $('#startBtn').textContent = '继续';
     $('#ringWrap').classList.remove('running');
     this.renderTime();
+    this.pushState(true);
   },
 
   reset() {
@@ -1238,6 +1240,7 @@ const Pomodoro = {
     $('#ringWrap').classList.remove('running', 'break');
     $('#focusTip').textContent = '出炉后会有提示音，可以休息 ' + Store.data.settings.breakMinutes + ' 分钟';
     this.renderTime();
+    this.pushState(true);
   },
 
   _step() {
@@ -1276,6 +1279,7 @@ const Pomodoro = {
       this.reset();
     }
     this.renderTime();
+    this.pushState(true);
   },
 
   renderTime() {
@@ -1290,9 +1294,10 @@ const Pomodoro = {
     this.pushState();
   },
 
-  /* 推送当前专注状态：Tauri 环境直接广播给悬浮窗；浏览器版走本地服务器桥 */
-  pushState() {
-    if (this._lastPush && Date.now() - this._lastPush < 900) return;
+  /* 推送当前专注状态：Tauri 环境直接广播给悬浮窗；浏览器版走本地服务器桥
+     force=true 用于暂停/继续等关键切换，绕过节流，防止最后状态被丢弃 */
+  pushState(force) {
+    if (!force && this._lastPush && Date.now() - this._lastPush < 900) return;
     this._lastPush = Date.now();
     const t = Store.data.tasks.find(x => x.id === this.taskId);
     const payload = {
@@ -1629,7 +1634,7 @@ if (window.__TAURI__ && window.__TAURI__.event) {
   window.__TAURI__.event.listen('focus-request', () => {
     console.log('[main] 收到 focus-request，推送状态');
     Pomodoro._lastPush = 0;
-    Pomodoro.pushState();
+    Pomodoro.pushState(true);
   });
 }
 </script>
