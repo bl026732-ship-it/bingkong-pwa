@@ -141,7 +141,7 @@ body::after {
   position: relative; z-index: 1;
   max-width: 1060px;
   margin: 0 auto;
-  padding: 36px 24px 56px;
+  padding: 36px 24px 20px;
   display: grid;
   grid-template-columns: 1fr 1.06fr;
   gap: 26px;
@@ -403,40 +403,46 @@ body::after {
 }
 .foot button { color: var(--accent); font-size: inherit; }
 
-/* ---------- 底部通栏把手（均分整行） ---------- */
+/* ---------- 底部悬浮把手（圆角色块） ---------- */
 .dock {
+  --dock-a: var(--accent); --dock-b: var(--accent-2);
   flex: 1; min-width: 0;
   position: relative;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 13px 8px 15px;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 12px 14px;
   font-size: var(--font-sm); color: var(--text-2);
   white-space: nowrap;
+  background: color-mix(in srgb, var(--dock-a) 13%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--dock-a) 32%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
   transition: all 180ms var(--ease);
 }
-.dock:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.dock:active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.dock + .dock::before {
-  content: ''; position: absolute; left: 0; top: 50%;
-  transform: translateY(-50%);
-  width: 1px; height: 22px;
-  background: var(--card-border);
+#calDock   { --dock-a: #FF7A00; --dock-b: #FFB340; }
+#trendDock { --dock-a: #0A84FF; --dock-b: #64D2FF; }
+#pieDock   { --dock-a: #7D4CDB; --dock-b: #BF5AF2; }
+.dock:hover {
+  color: var(--text);
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--dock-a) 55%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--dock-a) 22%, transparent);
 }
+.dock:active { transform: translateY(0); }
 .dock::after {
-  content: ''; position: absolute; top: 0; left: 50%;
+  content: ''; position: absolute; top: 6px; left: 50%;
   transform: translateX(-50%);
-  width: 0; height: 2px; border-radius: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  transition: width .2s var(--ease);
+  width: 26px; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--dock-a), var(--dock-b));
+  opacity: .85;
 }
-.dock:hover::after { width: 44px; }
 .dock-title { font-weight: 600; color: var(--text); }
 .dock-heat { display: flex; gap: 2px; }
 .dock-heat i { width: 7px; height: 7px; border-radius: 2px; background: var(--track); }
-.dock-heat i.l1 { background: color-mix(in srgb, var(--accent) 35%, transparent); }
-.dock-heat i.l2 { background: color-mix(in srgb, var(--accent) 65%, transparent); }
-.dock-heat i.l3 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.dock-heat i.l1 { background: color-mix(in srgb, var(--dock-b) 35%, transparent); }
+.dock-heat i.l2 { background: color-mix(in srgb, var(--dock-b) 65%, transparent); }
+.dock-heat i.l3 { background: linear-gradient(135deg, var(--dock-a), var(--dock-b)); }
 .dock-total { font-variant-numeric: tabular-nums; }
-.dock-arrow { color: var(--accent); font-size: 10px; }
+.dock-arrow { color: var(--dock-b); font-size: 10px; }
 
 .cal-mask {
   position: fixed; inset: 0; z-index: 190;
@@ -506,15 +512,11 @@ body::after {
 .cal-cell.lv2 { background: color-mix(in srgb, var(--accent) 17%, var(--card)); }
 .cal-cell.lv3 { background: color-mix(in srgb, var(--accent) 26%, var(--card)); }
 
-/* ---------- 底部通栏容器 ---------- */
+/* ---------- 底部悬浮把手容器 ---------- */
 .dock-row {
-  position: fixed; left: 0; right: 0; bottom: 0;
+  position: fixed; left: 12px; right: 12px; bottom: 10px;
   z-index: 150;
-  display: flex;
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
-  border-top: 1px solid var(--card-border);
-  box-shadow: 0 -12px 40px rgba(0,0,0,.35);
+  display: flex; gap: 10px;
   animation: rise 560ms var(--ease) both;
 }
 
