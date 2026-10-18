@@ -882,6 +882,7 @@ const CloudSync = {
   cfg: {},
   _pushTimer: null,
   _pullTimer: null,
+  _pendingReload: false,
 
   loadCfg() {
     try { this.cfg = JSON.parse(localStorage.getItem(SYNC_CFG_KEY)) || {}; }
@@ -907,23 +908,39 @@ const CloudSync = {
   async push() {
     if (!this.configured()) throw new Error('先填 Worker 地址和密钥，点保存配置');
     await this._req('POST', JSON.stringify({ updatedAt: Date.now(), data: Store.data }));
-    this.cfg.lastPush = Date.now();
+    const now = Date.now();
+    this.cfg.lastPush = now;
+    this.cfg.lastPull = now;   /* 刚推上去的云端就是本机这份，无需再拉 */
     this.saveCfg();
     return true;
   },
 
-  /* 下载：云端比本机新才覆盖，然后刷新页面重新渲染 */
-  async pull() {
+  /* 下载：云端比本机新才覆盖。
+     计时进行中不刷新页面（会把专注/休息冲掉），先记下，等闲时由 applyPending 应用 */
+  async pull(force) {
     if (!this.configured()) throw new Error('先填 Worker 地址和密钥，点保存配置');
     const remote = await this._req('GET');
     if (!remote || !remote.data) return 'empty';
-    if ((remote.updatedAt || 0) <= (this.cfg.lastPull || 0)) return 'same';
+    const baseline = Math.max(this.cfg.lastPull || 0, this.cfg.lastPush || 0);
+    if ((remote.updatedAt || 0) <= baseline) return 'same';
     this.cfg.lastPull = Date.now();
     this.saveCfg();
     Store.data = Store._normalize(remote.data);
     Store.save();
+    const busy = Pomodoro.running || Pomodoro.remaining !== Pomodoro.total;
+    if (!force && busy) {
+      this._pendingReload = true;
+      return 'deferred';
+    }
     location.reload();
     return 'updated';
+  },
+
+  /* 专注暂停/重置后调用：若有待应用的云端数据则刷新页面 */
+  applyPending() {
+    if (!this._pendingReload) return;
+    this._pendingReload = false;
+    location.reload();
   },
 
   /* 数据变动后 3 秒自动上传（防抖，避免连续打字刷请求） */
@@ -978,7 +995,7 @@ const CloudSync = {
       this.cfg.key = $('#syncKey').value.trim();
       this._status('下载中…');
       try {
-        const r = await this.pull();
+        const r = await this.pull(true);
         this._status(r === 'updated' ? '已下载最新数据，正在刷新…'
           : r === 'empty' ? '云端还没有数据，先在电脑上点一次上传'
           : '本地已经是最新');
@@ -1384,6 +1401,7 @@ const Pomodoro = {
     $('#ringWrap').classList.remove('running');
     this.renderTime();
     this.pushState(true);
+    if (typeof CloudSync !== 'undefined') CloudSync.applyPending();
   },
 
   reset() {
@@ -1397,6 +1415,7 @@ const Pomodoro = {
     $('#focusTip').textContent = '出炉后会有提示音，可以休息 ' + Store.data.settings.breakMinutes + ' 分钟';
     this.renderTime();
     this.pushState(true);
+    if (typeof CloudSync !== 'undefined') CloudSync.applyPending();
   },
 
   _step() {
