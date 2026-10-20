@@ -1,6 +1,6 @@
 /* 饼控自律 PWA — Service Worker
    缓存优先：应用外壳离线可用，有网时自动更新 */
-const CACHE = 'bingkong-pwa-v7';
+const CACHE = 'bingkong-pwa-v8';
 const ASSETS = [
   './',
   './index.html',

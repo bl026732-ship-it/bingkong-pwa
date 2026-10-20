@@ -224,8 +224,11 @@ body::after {
 
 .task-main { display: flex; align-items: flex-start; gap: 13px; }
 .task-main .task-check { margin-top: 2px; }
+.task-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.task-time { font-size: 11px; color: var(--text-2); opacity: .65; font-variant-numeric: tabular-nums; }
 .task-meta { display: flex; align-items: center; gap: 8px; padding-left: 37px; }
 .task-meta .task-del { margin-left: auto; }
+.pool-search { margin: -6px 0 14px; }
 
 .task-check {
   width: 24px; height: 24px; flex-shrink: 0;
@@ -565,6 +568,21 @@ body::after {
 .pie-empty { text-align: center; color: var(--text-2); font-size: var(--font-sm); padding: 44px 0 36px; line-height: 2.2; }
 .pie-empty .big { font-size: 40px; display: block; }
 .pie-input-row { display: flex; gap: 10px; margin-top: 10px; }
+.pie-ddl { margin-left: 8px; }
+.pie-ddl.soon { color: var(--accent); font-weight: 600; }
+.pie-ddl.over { color: var(--danger); font-weight: 600; }
+.pie-ddl-btn {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--text-2);
+  transition: all 150ms var(--ease);
+}
+.pie-ddl-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.pie-date-input {
+  margin-top: 8px; padding: 7px 12px; font-size: var(--font-sm);
+  color-scheme: dark;
+}
+[data-theme="light"] .pie-date-input { color-scheme: light; }
 
 /* ---------- 补烤（忘开计时时的手动折算） ---------- */
 .topup-btn {
@@ -679,6 +697,9 @@ body::after {
     <div class="task-input-row">
       <input class="task-input" id="taskInput" placeholder="要做点什么？回车快速添加" maxlength="80">
       <button class="btn-primary" id="taskAddBtn">放入烤炉</button>
+    </div>
+    <div class="pool-search" id="poolSearchRow" hidden>
+      <input class="task-input" id="poolSearch" placeholder="🔍 筛选任务…" autocomplete="off">
     </div>
     <ul class="task-list" id="taskList"></ul>
     <div class="task-empty" id="taskEmpty" hidden><span class="big" id="taskEmptyIcon">🍪</span><span id="taskEmptyText">烤炉还是空的<br>先放一块生饼进去吧</span></div>
@@ -858,6 +879,12 @@ function escapeHtml(s) {
 function formatTime(s) {
   const m = Math.floor(s / 60), sec = s % 60;
   return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+}
+/* 创建时间戳：10.20 23:43 */
+function fmtStamp(ts) {
+  const d = new Date(ts || Date.now());
+  const p = n => String(n).padStart(2, '0');
+  return (d.getMonth() + 1) + '.' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
 const Store = {
@@ -1281,6 +1308,7 @@ const PipUI = {
    ============================================================ */
 const Tasks = {
   view: 'daily',   // daily | basic | elite
+  query: '',       // 基础池/卓越池的搜索词
 
   POOL_META: {
     daily: { a: '#FFB340', b: '#FF7A00', title: '今日待烤', hint: '点击任务 = 开始专注它',
@@ -1294,6 +1322,10 @@ const Tasks = {
   init() {
     $$('#poolSwitch .seg').forEach(b =>
       b.addEventListener('click', () => this.setView(b.dataset.pool)));
+    $('#poolSearch').addEventListener('input', e => {
+      this.query = e.target.value.trim();
+      this.render();
+    });
     window.addEventListener('resize', () => this._positionThumb());
     this.setView('daily');
   },
@@ -1310,6 +1342,9 @@ const Tasks = {
     $('#taskInput').placeholder = m.ph;
     $('#taskEmptyIcon').textContent = m.emptyIcon;
     $('#taskEmptyText').innerHTML = m.emptyHtml;
+    const showSearch = pool !== 'daily';
+    $('#poolSearchRow').hidden = !showSearch;
+    if (!showSearch) { this.query = ''; $('#poolSearch').value = ''; }
     requestAnimationFrame(() => this._positionThumb());
     this.render();
   },
@@ -1328,11 +1363,21 @@ const Tasks = {
     list.innerHTML = '';
     doneList.innerHTML = '';
 
-    const all = Store.data.tasks.filter(t => (t.pool || 'daily') === this.view);
+    let all = Store.data.tasks.filter(t => (t.pool || 'daily') === this.view);
+    if (this.query && this.view !== 'daily') all = all.filter(t => t.title.includes(this.query));
     const undone = all.filter(t => !t.done);
     const done = all.filter(t => t.done);
 
-    $('#taskEmpty').hidden = all.length > 0;
+    if (all.length === 0 && this.query) {
+      $('#taskEmpty').hidden = false;
+      $('#taskEmptyIcon').textContent = '🔍';
+      $('#taskEmptyText').textContent = '没有匹配「' + this.query + '」的任务';
+    } else {
+      $('#taskEmpty').hidden = all.length > 0;
+      const m = this.POOL_META[this.view];
+      $('#taskEmptyIcon').textContent = m.emptyIcon;
+      $('#taskEmptyText').innerHTML = m.emptyHtml;
+    }
     $('#doneZone').hidden = done.length === 0;
 
     undone.forEach(t => list.appendChild(this._item(t)));
@@ -1371,7 +1416,8 @@ const Tasks = {
       '<button class="task-check" title="完成">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
       '</button>' +
-      '<span class="task-text">' + escapeHtml(t.title) + '</span>' +
+      '<div class="task-body"><span class="task-text">' + escapeHtml(t.title) + '</span>' +
+      '<span class="task-time">创建于 ' + fmtStamp(t.createdAt) + '</span></div>' +
       '</div>' +
       '<div class="task-meta">' +
       '<span class="pomo-track" title="饼干进度：完成 ' + done + ' / 目标 ' + target + ' 块">' + pomoHtml + '</span>' +
@@ -1936,11 +1982,36 @@ const Pies = {
       const div = document.createElement('div');
       div.className = 'pie-item';
       const d = new Date(p.createdAt || Date.now());
+      /* 目标日期 → 倒计时 */
+      let ddlHtml = '';
+      if (p.deadline) {
+        const days = Math.ceil((new Date(p.deadline + 'T00:00:00') - new Date(todayStr() + 'T00:00:00')) / 86400000);
+        if (days < 0) ddlHtml = '<span class="pie-ddl over">🏁 已到期 ' + (-days) + ' 天</span>';
+        else if (days <= 30) ddlHtml = '<span class="pie-ddl soon">⏳ 只剩 ' + days + ' 天</span>';
+        else ddlHtml = '<span class="pie-ddl">⏳ 距目标还有 ' + days + ' 天</span>';
+      }
       div.innerHTML =
         '<span class="pie-emoji">🎯</span>' +
         '<div class="pie-body"><div class="pie-text">' + escapeHtml(p.text) + '</div>' +
-        '<div class="pie-date">画于 ' + (d.getMonth() + 1) + '月' + d.getDate() + '日</div></div>' +
+        '<div class="pie-date">画于 ' + (d.getMonth() + 1) + '月' + d.getDate() + '日' + ddlHtml + '</div></div>' +
+        '<button class="pie-ddl-btn" title="设置目标日期">📅</button>' +
         '<button class="pie-del" title="吃掉这个饼">✕</button>';
+      div.querySelector('.pie-ddl-btn').addEventListener('click', () => {
+        const body = div.querySelector('.pie-body');
+        if (body.querySelector('.pie-date-input')) return;
+        const inp = document.createElement('input');
+        inp.type = 'date';
+        inp.className = 'pie-date-input task-input';
+        if (p.deadline) inp.value = p.deadline;
+        body.appendChild(inp);
+        inp.focus();
+        inp.addEventListener('change', () => {
+          const cur = Store.data.pies.find(x => x.id === p.id);
+          if (cur) { cur.deadline = inp.value || null; Store.save(); }
+          this.render();
+          Toast.show(inp.value ? '⏳ 目标日期已设置' : '已取消目标日期');
+        });
+      });
       div.querySelector('.pie-del').addEventListener('click', () => this.remove(p.id));
       list.appendChild(div);
     });
