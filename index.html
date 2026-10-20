@@ -556,6 +556,36 @@ body::after {
 .pie-empty .big { font-size: 40px; display: block; }
 .pie-input-row { display: flex; gap: 10px; margin-top: 10px; }
 
+/* ---------- 补烤（忘开计时时的手动折算） ---------- */
+.topup-btn {
+  margin: 12px auto 0; display: block;
+  font-size: var(--font-xs); color: var(--text-2);
+  padding: 7px 15px; border-radius: 999px;
+  border: 1px dashed var(--card-border);
+  transition: all 150ms var(--ease);
+}
+.topup-btn:hover { color: var(--accent); border-color: var(--accent); }
+.topup-panel {
+  margin-top: 12px; padding: 16px 18px;
+  border-radius: 18px; text-align: left;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  border: 1px solid var(--card-border);
+  display: flex; flex-direction: column; gap: 14px;
+  animation: taskIn 260ms var(--ease);
+}
+.topup-row { display: flex; flex-direction: column; gap: 8px; }
+.topup-label { font-size: 12px; color: var(--text-2); }
+.topup-counts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.topup-counts .chip { padding: 6px 14px; }
+.topup-custom {
+  width: 78px; padding: 6px 10px; border-radius: 999px;
+  border: 1px solid var(--card-border); background: rgba(127,127,140,.10);
+  font-size: var(--font-sm);
+}
+.topup-task { padding: 9px 13px; font-size: var(--font-sm); }
+.topup-actions { display: flex; gap: 10px; }
+.topup-actions .btn-primary { padding: 10px 20px; }
+
 /* ---------- 云同步 ---------- */
 .sync-fields { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
 .sync-field span { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
@@ -671,6 +701,26 @@ body::after {
       <button class="btn-big btn-ghost" id="resetBtn">重置</button>
     </div>
     <div class="focus-tip" id="focusTip">专注结束后会有提示音，可以休息 5 分钟</div>
+    <button class="topup-btn" id="topupBtn">🕐 忘开计时？补烤一块</button>
+    <div class="topup-panel" id="topupPanel" hidden>
+      <div class="topup-row">
+        <span class="topup-label">补烤数量</span>
+        <div class="topup-counts">
+          <button class="chip t-count active" data-n="1">1 块</button>
+          <button class="chip t-count" data-n="2">2 块</button>
+          <button class="chip t-count" data-n="3">3 块</button>
+          <input class="topup-custom" id="topupCustom" type="number" min="1" max="12" placeholder="自定义">
+        </div>
+      </div>
+      <div class="topup-row">
+        <span class="topup-label">关联任务（可选）</span>
+        <select class="task-input topup-task" id="topupTask"></select>
+      </div>
+      <div class="topup-actions">
+        <button class="btn-primary" id="topupConfirm">计入今天</button>
+        <button class="chip" id="topupCancel">取消</button>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -777,6 +827,7 @@ body::after {
    ============================================================ */
 const LITE_KEY = 'orderOS_lite';
 const LEGACY_KEY = 'orderOS_v2';
+const TIMER_KEY = 'orderOS_timer';   /* 计时器状态：手机切后台页面被杀后可恢复 */
 const WORK_MINUTES = 25;
 const DEFAULT_BREAK = 5;
 
@@ -1006,6 +1057,65 @@ const CloudSync = {
       this.startAuto();
       this.pull().catch(() => {});
     }
+  }
+};
+
+/* ============================================================
+   补烤：忘开计时时的手动折算（听课等线下学习计入今日）
+   ============================================================ */
+const Topup = {
+  count: 1,
+
+  init() {
+    $('#topupBtn').addEventListener('click', () => {
+      const p = $('#topupPanel');
+      if (p.hidden) this.open(); else p.hidden = true;
+    });
+    $$('#topupPanel .t-count').forEach(b => b.addEventListener('click', () => {
+      $$('#topupPanel .t-count').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      this.count = Number(b.dataset.n) || 1;
+      $('#topupCustom').value = '';
+    }));
+    $('#topupCustom').addEventListener('input', () => {
+      if ($('#topupCustom').value !== '') {
+        $$('#topupPanel .t-count').forEach(x => x.classList.remove('active'));
+      }
+    });
+    $('#topupCancel').addEventListener('click', () => { $('#topupPanel').hidden = true; });
+    $('#topupConfirm').addEventListener('click', () => this.confirm());
+  },
+
+  open() {
+    const sel = $('#topupTask');
+    sel.innerHTML = '<option value="">（不关联任务）</option>';
+    const POOL_MARK = { daily: '🍪', basic: '⏰', elite: '✦' };
+    Store.data.tasks.filter(t => !t.done).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = (POOL_MARK[t.pool] || '') + ' ' + t.title;
+      sel.appendChild(o);
+    });
+    $('#topupPanel').hidden = false;
+  },
+
+  confirm() {
+    let n = Number($('#topupCustom').value) || this.count;
+    n = Math.max(1, Math.min(12, Math.round(n)));
+    const date = todayStr();
+    Store.data.stats.dailyTomatoes[date] = (Store.data.stats.dailyTomatoes[date] || 0) + n;
+    Store.data.stats.dailyMinutes[date] = (Store.data.stats.dailyMinutes[date] || 0) + n * Store.data.settings.workMinutes;
+    const tid = $('#topupTask').value;
+    if (tid) {
+      const t = Store.data.tasks.find(x => x.id === tid);
+      if (t) t.pomos = (t.pomos || 0) + n;
+    }
+    Store.save();
+    renderStats();
+    Tasks.render();
+    $('#topupPanel').hidden = true;
+    $('#topupCustom').value = '';
+    Toast.show('🍪 已补烤 ' + n + ' 块，计入今天');
   }
 };
 
@@ -1350,6 +1460,7 @@ const Pomodoro = {
   init() {
     $('#ringBar').style.strokeDasharray = CIRCUMFERENCE;
     this.reset();
+    this._restore();
     $('#startBtn').addEventListener('click', () => this.toggleRun());
     $('#resetBtn').addEventListener('click', () => this.reset());
     document.addEventListener('visibilitychange', () => {
@@ -1382,6 +1493,81 @@ const Pomodoro = {
     });
   },
 
+  /* ---------- 计时状态落盘：手机切后台页面被系统杀掉后重开可恢复 ---------- */
+  _persist(force) {
+    if (!force && this._lastPersist && Date.now() - this._lastPersist < 2000) return;
+    this._lastPersist = Date.now();
+    try {
+      localStorage.setItem(TIMER_KEY, JSON.stringify({
+        mode: this.mode,
+        running: this.running,
+        tickAt: this.running ? this._tickAt : 0,
+        remaining: this.remaining,
+        total: this.total,
+        taskId: this.taskId
+      }));
+    } catch (e) { /* 存储不可用时静默 */ }
+  },
+
+  _restore() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(TIMER_KEY)); } catch (e) {}
+    if (!s) return;
+
+    this.taskId = s.taskId || null;
+    const t = Store.data.tasks.find(x => x.id === this.taskId);
+    $('#ringLabel').innerHTML = t ? '正在烤：<b>' + escapeHtml(t.title) + '</b>' : '自由专注';
+    this.syncTaskUI();
+
+    this.mode = s.mode === 'break' ? 'break' : 'work';
+    this.total = s.total > 0 ? s.total : this.total;
+
+    if (!s.running) {
+      /* 暂停中的状态：恢复剩余时间，等用户继续 */
+      this.remaining = Math.max(0, Math.min(s.remaining || 0, this.total));
+      if (this.mode === 'break') { $('#ringWrap').classList.add('break'); $('#resetBtn').textContent = '跳过休息'; }
+      if (this.remaining < this.total) $('#startBtn').textContent = '继续';
+      this.renderTime();
+      return;
+    }
+
+    const leftMs = (s.tickAt || 0) - Date.now();
+    if (leftMs > 0) {
+      /* 还在计时中：无缝续上 */
+      this.remaining = Math.max(1, Math.round(leftMs / 1000));
+      this._tickAt = s.tickAt;
+      this.running = true;
+      this.timer = setInterval(() => this._step(), 250);
+      $('#startBtn').textContent = '暂停';
+      $('#ringWrap').classList.add('running');
+      if (this.mode === 'break') { $('#ringWrap').classList.add('break'); $('#resetBtn').textContent = '跳过休息'; }
+      this.renderTime();
+      Toast.show('⏱ 已恢复上次未完成的计时');
+    } else if (this.mode === 'work') {
+      /* 离开期间工作到点了：照样计入统计，停在休息入口 */
+      const minutes = Math.round(this.total / 60);
+      const date = todayStr();
+      Store.data.stats.dailyTomatoes[date] = (Store.data.stats.dailyTomatoes[date] || 0) + 1;
+      Store.data.stats.dailyMinutes[date] = (Store.data.stats.dailyMinutes[date] || 0) + minutes;
+      if (this.taskId) Tasks.addPomo(this.taskId);
+      Store.save();
+      renderStats();
+      this.mode = 'break';
+      this.total = this.remaining = Store.data.settings.breakMinutes * 60;
+      $('#ringWrap').classList.add('break');
+      $('#startBtn').textContent = '开始休息';
+      $('#resetBtn').textContent = '跳过休息';
+      $('#focusTip').textContent = '点击「跳过休息」直接进入下一轮';
+      this.renderTime();
+      this.pushState(true);
+      Toast.show('🍪 离开期间出炉了一块饼！');
+    } else {
+      /* 休息也在离开期间结束了 */
+      this.reset();
+      Toast.show('上次休息已结束，准备烤下一块');
+    }
+  },
+
   toggleRun() {
     if (this.running) { this.pause(); return; }
     if (this.mode === 'work') Sound._ensure();   // 用户手势里解锁音频
@@ -1391,6 +1577,7 @@ const Pomodoro = {
     $('#startBtn').textContent = '暂停';
     $('#ringWrap').classList.add('running');
     this.renderTime();
+    this._persist(true);
     this.pushState(true);
   },
 
@@ -1400,6 +1587,7 @@ const Pomodoro = {
     $('#startBtn').textContent = '继续';
     $('#ringWrap').classList.remove('running');
     this.renderTime();
+    this._persist(true);
     this.pushState(true);
     if (typeof CloudSync !== 'undefined') CloudSync.applyPending();
   },
@@ -1414,6 +1602,7 @@ const Pomodoro = {
     $('#ringWrap').classList.remove('running', 'break');
     $('#focusTip').textContent = '出炉后会有提示音，可以休息 ' + Store.data.settings.breakMinutes + ' 分钟';
     this.renderTime();
+    this._persist(true);
     this.pushState(true);
     if (typeof CloudSync !== 'undefined') CloudSync.applyPending();
   },
@@ -1454,6 +1643,7 @@ const Pomodoro = {
       this.reset();
     }
     this.renderTime();
+    this._persist(true);
     this.pushState(true);
   },
 
@@ -1466,6 +1656,7 @@ const Pomodoro = {
       $('#startBtn').textContent = this.running ? '暂停休息' : (this.remaining < this.total ? '继续休息' : '开始休息');
     }
     PipUI.render();
+    this._persist();
     this.pushState();
   },
 
@@ -1790,6 +1981,7 @@ Cal.init();
 Trend.init();
 Pies.init();
 CloudSync.init();
+Topup.init();
 
 $('#themeBtn').addEventListener('click', toggleTheme);
 $('#pipBtn').addEventListener('click', () => {
