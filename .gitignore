@@ -3,3 +3,4 @@ _lite_check.js
 *.log
 .kimi-code/
 src-tauri/target/
+.workbuddy/

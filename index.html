@@ -60,6 +60,9 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* hidden 属性必须真的能藏住元素（否则 display:flex 之类的作者样式会把它顶回来） */
+[hidden] { display: none !important; }
+
 html {
   font-family: -apple-system, 'SF Pro Display', 'PingFang SC', 'Helvetica Neue', sans-serif;
   font-size: var(--font-body);
@@ -141,7 +144,7 @@ body::after {
   position: relative; z-index: 1;
   max-width: 1060px;
   margin: 0 auto;
-  padding: 36px 24px 20px;
+  padding: 36px 24px 76px;   /* 底部留出固定把手的高度，避免把手压住卡片内容 */
   display: grid;
   grid-template-columns: 1fr 1.06fr;
   gap: 26px;
@@ -371,6 +374,41 @@ body::after {
 }
 .ring-label { font-size: var(--font-sm); color: var(--text-2); max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ring-label b { color: var(--accent); font-weight: 600; }
+
+/* ---------- 专注时长选择 ---------- */
+.dur-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; flex-wrap: wrap;
+  margin: -6px 0 18px;
+}
+.dur-label { font-size: var(--font-xs); color: var(--text-2); }
+.dur-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.dur-chip {
+  padding: 5px 12px; border-radius: 999px;
+  font-size: var(--font-xs); font-variant-numeric: tabular-nums;
+}
+.dur-chip:disabled { opacity: .4; cursor: default; }
+.dur-custom {
+  width: 76px; padding: 5px 8px;
+  border: 1px solid var(--card-border); border-radius: 999px;
+  background: rgba(127,127,140,.10);
+  font-size: var(--font-xs); text-align: center;
+  transition: all 150ms var(--ease);
+  -moz-appearance: textfield;
+}
+.dur-custom::-webkit-outer-spin-button,
+.dur-custom::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+[data-theme="light"] .dur-custom { background: rgba(255,255,255,.55); }
+.dur-custom:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.dur-custom:disabled { opacity: .4; }
+.dur-custom::placeholder { color: var(--text-2); }
+@media (max-width: 430px) {
+  .dur-row { gap: 6px; }
+  .dur-chips { gap: 5px; }
+  .dur-chip { padding: 4px 9px; font-size: 12px; }
+  .dur-custom { width: 62px; padding: 4px 4px; }
+  .dur-label { font-size: 12px; }
+}
 
 .focus-actions { display: flex; gap: 12px; justify-content: center; }
 .btn-big {
@@ -728,6 +766,16 @@ body::after {
         <div class="ring-label" id="ringLabel">自由专注</div>
       </div>
     </div>
+    <div class="dur-row" id="durRow">
+      <span class="dur-label">专注时长（分钟）</span>
+      <div class="dur-chips">
+        <button class="chip dur-chip" data-min="15">15</button>
+        <button class="chip dur-chip" data-min="25">25</button>
+        <button class="chip dur-chip" data-min="45">45</button>
+        <button class="chip dur-chip" data-min="60">60</button>
+        <input class="dur-custom" id="durCustom" type="number" inputmode="numeric" min="1" max="180" placeholder="自定义" aria-label="自定义专注分钟数">
+      </div>
+    </div>
     <div class="focus-actions">
       <button class="btn-big btn-start" id="startBtn">开始专注</button>
       <button class="btn-big btn-ghost" id="resetBtn">重置</button>
@@ -860,15 +908,27 @@ body::after {
 const LITE_KEY = 'orderOS_lite';
 const LEGACY_KEY = 'orderOS_v2';
 const TIMER_KEY = 'orderOS_timer';   /* 计时器状态：手机切后台页面被杀后可恢复 */
-const WORK_MINUTES = 25;
+const LEADER_KEY = 'orderOS_leader'; /* 多窗口选主租约 */
+const WORK_MINUTES = 25;             /* 默认专注时长 */
 const DEFAULT_BREAK = 5;
+const MIN_WORK = 1, MAX_WORK = 180;  /* 自定义时长边界 */
+const PRESET_MINS = [15, 25, 45, 60];
+const MAX_TARGET = 12;               /* 单任务目标饼干上限 */
+const POOLS = ['daily', 'basic', 'elite'];
+const SCHEMA_VERSION = 5;
 
 const $ = (sel, ctx) => (ctx || document).querySelector(sel);
 const $$ = (sel, ctx) => Array.from((ctx || document).querySelectorAll(sel));
 
-function todayStr() {
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function dateKey(d) {
+  const x = (d instanceof Date) ? d : new Date();
+  return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+}
+function todayStr() { return dateKey(); }
+function clampInt(v, min, max, dflt) {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return dflt;
+  return Math.min(max, Math.max(min, n));
 }
 function genId(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function escapeHtml(s) {
@@ -890,38 +950,77 @@ function fmtStamp(ts) {
 const Store = {
   data: null,
   load() {
-    try {
-      const raw = localStorage.getItem(LITE_KEY);
-      if (raw) { this.data = this._normalize(JSON.parse(raw)); return; }
-    } catch (e) { console.warn('load lite failed:', e); }
-    this.data = this._importLegacy() || this._blank();
+    let raw = null;
+    try { raw = localStorage.getItem(LITE_KEY); } catch (e) { /* 存储被禁用 */ }
+    if (raw) {
+      try { this.data = this._normalize(JSON.parse(raw)); return; }
+      catch (e) {
+        console.warn('load lite failed:', e);
+        /* 解析失败：先留一份原始串，再走导入，避免覆盖后无据可查 */
+        try { localStorage.setItem(LITE_KEY + '_bak', raw); } catch (_) {}
+      }
+    }
+    this.data = this._normalize(this._importLegacy() || this._blank());
     this.save();
   },
   _blank() {
     return {
-      version: 4,
-      settings: { workMinutes: 25, breakMinutes: DEFAULT_BREAK, theme: 'auto' },
+      version: SCHEMA_VERSION,
+      settings: { workMinutes: WORK_MINUTES, breakMinutes: DEFAULT_BREAK, theme: 'auto' },
       tasks: [],
       pies: [],
       stats: { dailyTomatoes: {}, dailyMinutes: {} }
     };
   },
+  /* 归一化：合并不是重建 —— 未知顶层字段/未知设置项一律原样保留，
+     以后加新功能（打卡、标签、会话明细…）不会在刷新时被抹掉 */
   _normalize(d) {
     const base = this._blank();
-    return {
-      version: 4,
-      settings: Object.assign(base.settings, d.settings || {}, { workMinutes: WORK_MINUTES }),
-      tasks: Array.isArray(d.tasks) ? d.tasks.map(t => {
-        const n = Object.assign({ pool: 'daily' }, t);
-        if (!n.targetPomos) n.targetPomos = Math.max(1, n.pomos || 1);
-        return n;
-      }) : [],
-      pies: Array.isArray(d.pies) ? d.pies : [],
-      stats: {
-        dailyTomatoes: (d.stats && d.stats.dailyTomatoes) || {},
-        dailyMinutes: (d.stats && d.stats.dailyMinutes) || {}
-      }
-    };
+    const src = (d && typeof d === 'object') ? d : {};
+    const out = Object.assign({}, base, src);
+
+    const s = Object.assign({}, base.settings, src.settings || {});
+    s.workMinutes = clampInt(s.workMinutes, MIN_WORK, MAX_WORK, WORK_MINUTES);
+    s.breakMinutes = clampInt(s.breakMinutes, 1, 60, DEFAULT_BREAK);
+    if (s.theme !== 'light' && s.theme !== 'dark') s.theme = 'auto';
+    out.settings = s;
+
+    const st = Object.assign({}, base.stats, src.stats || {});
+    st.dailyTomatoes = (src.stats && typeof src.stats.dailyTomatoes === 'object' && src.stats.dailyTomatoes) || {};
+    st.dailyMinutes = (src.stats && typeof src.stats.dailyMinutes === 'object' && src.stats.dailyMinutes) || {};
+    if (!Array.isArray(st.recentRuns)) st.recentRuns = [];
+    out.stats = st;
+
+    const seen = {};
+    out.tasks = (Array.isArray(src.tasks) ? src.tasks : [])
+      .map(t => this._normTask(t))
+      .filter(t => {
+        if (!t) return false;
+        if (seen[t.id]) t.id = genId('t_');   /* id 冲突时重新发号，避免 find() 认错人 */
+        seen[t.id] = 1;
+        return true;
+      });
+
+    out.pies = (Array.isArray(src.pies) ? src.pies : [])
+      .filter(p => p && typeof p === 'object' && p.text)
+      .map(p => Object.assign({ id: genId('p_'), createdAt: Date.now() }, p));
+
+    out.version = SCHEMA_VERSION;
+    return out;
+  },
+  _normTask(t) {
+    if (!t || typeof t !== 'object') return null;
+    const title = typeof t.title === 'string' ? t.title.trim() : '';
+    if (!title) return null;
+    const n = Object.assign({}, t);
+    n.id = t.id || genId('t_');
+    n.title = title;
+    n.done = !!t.done;
+    n.pomos = Math.max(0, parseInt(t.pomos, 10) || 0);
+    n.targetPomos = clampInt(n.targetPomos || n.pomos || 1, 1, MAX_TARGET, 1);
+    n.pool = POOLS.indexOf(t.pool) >= 0 ? t.pool : 'daily';
+    n.createdAt = Number(t.createdAt) || Date.now();
+    return n;
   },
   /* 从 1.5 版 orderOS_v2 导入：未完成任务、计时设置、番茄统计 */
   _importLegacy() {
@@ -958,7 +1057,37 @@ const Store = {
   save() {
     try { localStorage.setItem(LITE_KEY, JSON.stringify(this.data)); }
     catch (e) { console.warn('save failed:', e); }
-    if (typeof CloudSync !== 'undefined') CloudSync.schedulePush();
+    CloudSync.schedulePush();
+  }
+};
+
+/* ============================================================
+   统计：出炉计数的唯一写入口
+   —— 计时完成 / 离开期间到点 / 手动补烤 全走这里，
+      避免三处各写一遍公式导致以后改口径漏改
+   —— runId 去重：多窗口同时恢复同一个计时，只会记一次
+   ============================================================ */
+const Stats = {
+  recordTomato(n, taskId, runId) {
+    n = Math.max(1, Math.round(Number(n) || 1));
+    const st = Store.data.stats;
+    if (runId) {
+      if (st.recentRuns.indexOf(runId) >= 0) return false;   /* 这个番茄已经记过了 */
+      st.recentRuns.push(runId);
+      if (st.recentRuns.length > 200) st.recentRuns = st.recentRuns.slice(-200);
+    }
+    const date = todayStr();
+    const mins = Store.data.settings.workMinutes;
+    st.dailyTomatoes[date] = (st.dailyTomatoes[date] || 0) + n;
+    st.dailyMinutes[date] = (st.dailyMinutes[date] || 0) + n * mins;
+    if (taskId) {
+      const t = Store.data.tasks.find(x => x.id === taskId);
+      if (t) t.pomos = (t.pomos || 0) + n;
+    }
+    Store.save();
+    renderStats();
+    if (taskId) Tasks.render();
+    return true;
   }
 };
 
@@ -1016,7 +1145,8 @@ const CloudSync = {
     this.saveCfg();
     Store.data = Store._normalize(remote.data);
     Store.save();
-    const busy = Pomodoro.running || Pomodoro.remaining !== Pomodoro.total;
+    const ps = Pomodoro.state;
+    const busy = ps.running || ps.remaining !== ps.total;
     if (!force && busy) {
       this._pendingReload = true;
       return 'deferred';
@@ -1032,9 +1162,11 @@ const CloudSync = {
     location.reload();
   },
 
-  /* 数据变动后 3 秒自动上传（防抖，避免连续打字刷请求） */
+  /* 数据变动后 3 秒自动上传（防抖，避免连续打字刷请求）
+     只有主窗口自动上传，多个窗口同时开着时不会互相覆盖云端 */
   schedulePush() {
     if (!this.cfg.auto || !this.configured()) return;
+    if (!Tabs.leader) return;
     clearTimeout(this._pushTimer);
     this._pushTimer = setTimeout(() => {
       this.push().catch(e => console.warn('[sync] 自动上传失败:', e));
@@ -1140,17 +1272,8 @@ const Topup = {
   confirm() {
     let n = Number($('#topupCustom').value) || this.count;
     n = Math.max(1, Math.min(12, Math.round(n)));
-    const date = todayStr();
-    Store.data.stats.dailyTomatoes[date] = (Store.data.stats.dailyTomatoes[date] || 0) + n;
-    Store.data.stats.dailyMinutes[date] = (Store.data.stats.dailyMinutes[date] || 0) + n * Store.data.settings.workMinutes;
     const tid = $('#topupTask').value;
-    if (tid) {
-      const t = Store.data.tasks.find(x => x.id === tid);
-      if (t) t.pomos = (t.pomos || 0) + n;
-    }
-    Store.save();
-    renderStats();
-    Tasks.render();
+    Stats.recordTomato(n, tid || null);
     $('#topupPanel').hidden = true;
     $('#topupCustom').value = '';
     Toast.show('🍪 已补烤 ' + n + ' 块，计入今天');
@@ -1289,17 +1412,18 @@ const PipUI = {
   render() {
     const w = this.win;
     if (!w || !w.document.body) return;
-    const t = Store.data.tasks.find(x => x.id === Pomodoro.taskId);
-    const timeText = formatTime(Pomodoro.remaining);
+    const ps = Pomodoro.state;
+    const t = ps.taskId ? Store.data.tasks.find(x => x.id === ps.taskId) : null;
+    const timeText = formatTime(ps.remaining);
     w.document.getElementById('pTask').textContent =
-      t ? t.title : (Pomodoro.mode === 'break' ? '☕ 烤炉保温中' : '自由专注');
+      t ? t.title : (ps.mode === 'break' ? '☕ 烤炉保温中' : '自由专注');
     w.document.getElementById('pTime').textContent = timeText;
     // 标题栏直接当倒计时用（浏览器强制显示标题，那就让它有用）
-    w.document.title = (Pomodoro.running ? timeText + ' · ' : '') + '饼控自律';
-    w.document.getElementById('pFill').style.width = (Pomodoro.remaining / Pomodoro.total * 100) + '%';
+    w.document.title = (ps.running ? timeText + ' · ' : '') + '饼控自律';
+    w.document.getElementById('pFill').style.width = (ps.remaining / ps.total * 100) + '%';
     const bd = w.document.body;
-    bd.classList.toggle('break', Pomodoro.mode === 'break');
-    bd.classList.toggle('paused', !Pomodoro.running && Pomodoro.remaining < Pomodoro.total);
+    bd.classList.toggle('break', ps.mode === 'break');
+    bd.classList.toggle('paused', !ps.running && ps.remaining < ps.total);
   }
 };
 
@@ -1390,7 +1514,7 @@ const Tasks = {
     const li = document.createElement('li');
     li.className = 'task-item' + (t.done ? ' done' : '');
     li.dataset.id = t.id;
-    const target = Math.max(1, Math.min(12, t.targetPomos | 0));
+    const target = clampInt(t.targetPomos | 0, 1, MAX_TARGET, 1);
     const done = t.pomos | 0;
     let dots = '';
     for (let i = 0; i < Math.min(target, 10); i++) {
@@ -1434,11 +1558,7 @@ const Tasks = {
       if (this.view === 'daily') this.backToPool(t.id); else this.toToday(t.id);
     });
     $$('.pomo-pm', li).forEach(b => b.addEventListener('click', () => {
-      const cur = Store.data.tasks.find(x => x.id === t.id);
-      if (!cur) return;
-      cur.targetPomos = Math.max(1, Math.min(12, (cur.targetPomos || 1) + Number(b.dataset.pm)));
-      Store.save();
-      this.render();
+      this.setTarget(t.id, Number(b.dataset.pm));
     }));
     if (!t.done && this.view === 'daily') li.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
@@ -1471,7 +1591,7 @@ const Tasks = {
   backToPool(id) {
     const t = Store.data.tasks.find(x => x.id === id);
     if (!t) return;
-    if (Pomodoro.taskId === id) Pomodoro.focusTask(null);
+    if (Pomodoro.state.taskId === id) Pomodoro.focusTask(null);
     t.pool = (t.fromPool === 'basic' || t.fromPool === 'elite') ? t.fromPool : 'basic';
     delete t.fromPool;
     Store.save();
@@ -1483,23 +1603,24 @@ const Tasks = {
     const t = Store.data.tasks.find(x => x.id === id);
     if (!t) return;
     t.done = !t.done;
-    if (t.done && Pomodoro.taskId === id) Pomodoro.focusTask(null);
+    if (t.done && Pomodoro.state.taskId === id) Pomodoro.focusTask(null);
     Store.save();
     this.render();
     if (t.done) Toast.show('🍪 出炉：' + t.title);
   },
 
   remove(id) {
-    if (Pomodoro.taskId === id) Pomodoro.focusTask(null);
+    if (Pomodoro.state.taskId === id) Pomodoro.focusTask(null);
     Store.data.tasks = Store.data.tasks.filter(x => x.id !== id);
     Store.save();
     this.render();
   },
 
-  addPomo(id) {
+  /* 加点心数/改目标：只动数据，进度由 Stats.recordTomato 统一写 */
+  setTarget(id, delta) {
     const t = Store.data.tasks.find(x => x.id === id);
     if (!t) return;
-    t.pomos = (t.pomos || 0) + 1;
+    t.targetPomos = clampInt((t.targetPomos || 1) + delta, 1, MAX_TARGET, 1);
     Store.save();
     this.render();
   }
@@ -1510,47 +1631,172 @@ const Tasks = {
    ============================================================ */
 const CIRCUMFERENCE = 2 * Math.PI * 118; // r=118 ≈ 741.42
 
+function workSec() { return clampInt(Store.data.settings.workMinutes, MIN_WORK, MAX_WORK, WORK_MINUTES) * 60; }
+function breakSec() { return clampInt(Store.data.settings.breakMinutes, 1, 60, DEFAULT_BREAK) * 60; }
+
 const Pomodoro = {
-  taskId: null,          // 正在专注的任务 id（null = 自由专注）
-  mode: 'work',          // work | break
-  total: 0,              // 本轮总秒数
-  remaining: 0,          // 剩余秒数
-  timer: null,           // setInterval id
-  running: false,
+  /* 计时器唯一状态源：改动走 setState()，输出走 _render() */
+  state: {
+    mode: 'work',      // work | break
+    total: 0,          // 本轮总秒数
+    remaining: 0,      // 剩余秒数
+    running: false,
+    tickAt: 0,         // 运行中：到点时间戳（后台节流靠它校正）
+    taskId: null,      // 正在专注的任务 id
+    runId: null        // 本轮唯一 id：多窗口去重记番茄
+  },
+  _timer: null,
+  _lastPush: 0,
+  _lastPersist: 0,
+  _labelSig: '',
+  _durSig: '',
+  _uiTask: undefined,
 
   init() {
     $('#ringBar').style.strokeDasharray = CIRCUMFERENCE;
-    this.reset();
+    /* 先摆出空闲态但「不落盘」，否则会覆盖掉上次的计时存档，恢复功能等于没有 */
+    this.reset({ persist: false, push: false });
     this._restore();
     $('#startBtn').addEventListener('click', () => this.toggleRun());
     $('#resetBtn').addEventListener('click', () => this.reset());
+    this.initDuration();
     document.addEventListener('visibilitychange', () => {
       // 切回页面时按真实时间校正（后台 setInterval 会被节流）
-      if (!document.hidden && this.running) {
-        this.remaining = Math.max(0, Math.round((this._tickAt - Date.now()) / 1000));
-        if (this.remaining <= 0) { this._complete(); return; }
-        this.renderTime();
-      }
+      const s = this.state;
+      if (document.hidden || !s.running) return;
+      const left = s.tickAt - Date.now();
+      if (left <= 0) { this._complete(); return; }
+      this.setState({ remaining: Math.ceil(left / 1000) });
     });
   },
 
+  /* ---------- 唯一状态入口：改状态 → 落盘 → 渲染 → 广播 ---------- */
+  setState(patch, opts) {
+    const o = opts || {};
+    Object.assign(this.state, patch);
+    if (o.persist !== false) this._persist(o.force);
+    this._render();
+    if (o.push !== false) this.pushState(o.force);
+  },
+
+  /* ---------- 唯一渲染入口 ---------- */
+  _render() {
+    const s = this.state;
+    $('#ringTime').textContent = formatTime(s.remaining);
+    $('#ringBar').style.strokeDashoffset = CIRCUMFERENCE * (1 - (s.total ? s.remaining / s.total : 0));
+    document.title = (s.running ? formatTime(s.remaining) + ' · ' : '') + '饼控自律 2.0';
+    const wrap = $('#ringWrap');
+    wrap.classList.toggle('running', s.running);
+    wrap.classList.toggle('break', s.mode === 'break');
+    this._renderLabel();
+    this._syncButtons();
+    this._syncDurationUI();
+    if (s.taskId !== this._uiTask) { this._uiTask = s.taskId; this.syncTaskUI(); }
+    PipUI.render();
+  },
+
+  _renderLabel() {
+    const s = this.state;
+    const t = s.taskId ? Store.data.tasks.find(x => x.id === s.taskId) : null;
+    const sig = (t ? t.title : '') + '|' + (s.taskId || '');
+    if (sig === this._labelSig) return;
+    this._labelSig = sig;
+    $('#ringLabel').innerHTML = t ? '正在烤：<b>' + escapeHtml(t.title) + '</b>' : '自由专注';
+  },
+
+  /* 按钮文案只在这里写（原来散在 6 处） */
+  _syncButtons() {
+    const s = this.state;
+    const brk = Store.data.settings.breakMinutes;
+    const start = $('#startBtn'), reset = $('#resetBtn'), tip = $('#focusTip');
+    if (s.mode === 'break') {
+      start.textContent = s.running ? '暂停休息' : (s.remaining < s.total ? '继续休息' : '开始休息');
+      reset.textContent = '跳过休息';
+      tip.textContent = '点击「跳过休息」直接进入下一轮';
+    } else {
+      start.textContent = s.running ? '暂停' : (s.remaining < s.total ? '继续' : '开始专注');
+      reset.textContent = '重置';
+      tip.textContent = '出炉后会有提示音，可以休息 ' + brk + ' 分钟';
+    }
+  },
+
+  /* ---------- 自定义专注时长 ---------- */
+  initDuration() {
+    $$('.dur-chip').forEach(b => b.addEventListener('click', () => {
+      this.setWorkMinutes(Number(b.dataset.min));
+    }));
+    const inp = $('#durCustom');
+    if (!inp) return;
+    inp.addEventListener('change', () => this.setWorkMinutes(inp.value));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+    this._syncDurationUI();
+  },
+
+  _syncDurationUI() {
+    const inp = $('#durCustom');
+    if (!inp) return;
+    const s = this.state;
+    const cur = Store.data.settings.workMinutes;
+    const sig = cur + '|' + (s.running ? 1 : 0);
+    if (sig === this._durSig) return;
+    this._durSig = sig;
+    $$('.dur-chip').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.min) === cur);
+      b.disabled = s.running;
+    });
+    inp.disabled = s.running;
+    if (document.activeElement !== inp) inp.value = PRESET_MINS.indexOf(cur) >= 0 ? '' : String(cur);
+  },
+
+  setWorkMinutes(raw) {
+    if (this.state.running) {
+      Toast.show('专注中不能改时长，先暂停或重置');
+      this._durSig = '';
+      this._syncDurationUI();
+      return;
+    }
+    /* 空值/非数字直接忽略（不能当成 0 再被夹成 1 分钟） */
+    const n = Math.round(Number(raw));
+    if (raw === '' || raw === null || !Number.isFinite(n) || n < MIN_WORK) {
+      Toast.show('时长请填 ' + MIN_WORK + '–' + MAX_WORK + ' 分钟');
+      this._durSig = '';
+      this._syncDurationUI();
+      return;
+    }
+    const v = Math.min(MAX_WORK, n);
+    Store.data.settings.workMinutes = v;
+    Store.save();
+    if (this.state.mode === 'work') {
+      const restarted = this.state.remaining < this.state.total;
+      this.setState({ total: v * 60, remaining: v * 60, tickAt: 0 }, { force: true });
+      Toast.show(restarted ? '🍪 已改为 ' + v + ' 分钟，本轮重新开始' : '🍪 专注时长：' + v + ' 分钟');
+    } else {
+      /* 休息中只影响下一轮，不动当前休息 */
+      this._durSig = '';
+      this._syncDurationUI();
+      Toast.show('🍪 下一轮起使用 ' + v + ' 分钟');
+    }
+  },
+
+  _startTimer() {
+    this._stopTimer();
+    this._timer = setInterval(() => this._step(), 250);
+  },
+  _stopTimer() {
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+  },
+
   focusTask(id) {
-    if (this.running && id !== this.taskId) {
+    if (this.state.running && id !== this.state.taskId) {
       Toast.show('专注中不能切换任务，先重置');
       return;
     }
-    this.taskId = id;
-    const t = Store.data.tasks.find(x => x.id === id);
-    $('#ringLabel').innerHTML = t ? '正在烤：<b>' + escapeHtml(t.title) + '</b>' : '自由专注';
-    this.syncTaskUI();
-    PipUI.render();
-    this._lastPush = 0;
-    this.pushState();
+    this.setState({ taskId: id }, { force: true });
   },
 
   syncTaskUI() {
     $$('.task-item').forEach(li => {
-      li.classList.toggle('focused', li.dataset.id === this.taskId && !li.classList.contains('done'));
+      li.classList.toggle('focused', li.dataset.id === this.state.taskId && !li.classList.contains('done'));
     });
   },
 
@@ -1558,69 +1804,56 @@ const Pomodoro = {
   _persist(force) {
     if (!force && this._lastPersist && Date.now() - this._lastPersist < 2000) return;
     this._lastPersist = Date.now();
+    const s = this.state;
     try {
       localStorage.setItem(TIMER_KEY, JSON.stringify({
-        mode: this.mode,
-        running: this.running,
-        tickAt: this.running ? this._tickAt : 0,
-        remaining: this.remaining,
-        total: this.total,
-        taskId: this.taskId
+        mode: s.mode,
+        running: s.running,
+        tickAt: s.running ? s.tickAt : 0,
+        remaining: s.remaining,
+        total: s.total,
+        taskId: s.taskId,
+        runId: s.runId
       }));
     } catch (e) { /* 存储不可用时静默 */ }
   },
 
   _restore() {
-    let s = null;
-    try { s = JSON.parse(localStorage.getItem(TIMER_KEY)); } catch (e) {}
-    if (!s) return;
+    let sv = null;
+    try { sv = JSON.parse(localStorage.getItem(TIMER_KEY)); } catch (e) {}
+    if (!sv) return;
 
-    this.taskId = s.taskId || null;
-    const t = Store.data.tasks.find(x => x.id === this.taskId);
-    $('#ringLabel').innerHTML = t ? '正在烤：<b>' + escapeHtml(t.title) + '</b>' : '自由专注';
-    this.syncTaskUI();
+    const mode = sv.mode === 'break' ? 'break' : 'work';
+    const total = Number(sv.total) > 0 ? Number(sv.total) : (mode === 'break' ? breakSec() : workSec());
+    const taskId = (sv.taskId && Store.data.tasks.some(t => t.id === sv.taskId)) ? sv.taskId : null;
+    const runId = sv.runId || null;
+    const base = { mode: mode, total: total, taskId: taskId, runId: runId };
 
-    this.mode = s.mode === 'break' ? 'break' : 'work';
-    this.total = s.total > 0 ? s.total : this.total;
-
-    if (!s.running) {
+    if (!sv.running) {
       /* 暂停中的状态：恢复剩余时间，等用户继续 */
-      this.remaining = Math.max(0, Math.min(s.remaining || 0, this.total));
-      if (this.mode === 'break') { $('#ringWrap').classList.add('break'); $('#resetBtn').textContent = '跳过休息'; }
-      if (this.remaining < this.total) $('#startBtn').textContent = '继续';
-      this.renderTime();
+      const remaining = Math.max(0, Math.min(Number(sv.remaining) || 0, total));
+      this.setState(Object.assign({}, base, { remaining: remaining, running: false, tickAt: 0 }), { force: true });
       return;
     }
 
-    const leftMs = (s.tickAt || 0) - Date.now();
+    const leftMs = Number(sv.tickAt) - Date.now();
     if (leftMs > 0) {
       /* 还在计时中：无缝续上 */
-      this.remaining = Math.max(1, Math.round(leftMs / 1000));
-      this._tickAt = s.tickAt;
-      this.running = true;
-      this.timer = setInterval(() => this._step(), 250);
-      $('#startBtn').textContent = '暂停';
-      $('#ringWrap').classList.add('running');
-      if (this.mode === 'break') { $('#ringWrap').classList.add('break'); $('#resetBtn').textContent = '跳过休息'; }
-      this.renderTime();
-      Toast.show('⏱ 已恢复上次未完成的计时');
-    } else if (this.mode === 'work') {
-      /* 离开期间工作到点了：照样计入统计，停在休息入口 */
-      const minutes = Math.round(this.total / 60);
-      const date = todayStr();
-      Store.data.stats.dailyTomatoes[date] = (Store.data.stats.dailyTomatoes[date] || 0) + 1;
-      Store.data.stats.dailyMinutes[date] = (Store.data.stats.dailyMinutes[date] || 0) + minutes;
-      if (this.taskId) Tasks.addPomo(this.taskId);
-      Store.save();
-      renderStats();
-      this.mode = 'break';
-      this.total = this.remaining = Store.data.settings.breakMinutes * 60;
-      $('#ringWrap').classList.add('break');
-      $('#startBtn').textContent = '开始休息';
-      $('#resetBtn').textContent = '跳过休息';
-      $('#focusTip').textContent = '点击「跳过休息」直接进入下一轮';
-      this.renderTime();
+      this.setState(Object.assign({}, base, {
+        remaining: Math.max(1, Math.ceil(leftMs / 1000)),
+        running: true,
+        tickAt: Number(sv.tickAt)
+      }), { force: true, push: false });
+      this._startTimer();
       this.pushState(true);
+      Toast.show('⏱ 已恢复上次未完成的计时');
+      return;
+    }
+
+    if (mode === 'work') {
+      /* 离开期间工作到点了：照样计入统计，停在休息入口 */
+      Stats.recordTomato(1, taskId, runId);
+      this._toBreak(true);
       Toast.show('🍪 离开期间出炉了一块饼！');
     } else {
       /* 休息也在离开期间结束了 */
@@ -1629,96 +1862,63 @@ const Pomodoro = {
     }
   },
 
+  /* 工作轮结束 → 休息（完成与恢复两条路径共用，口径不会走偏） */
+  _toBreak(fromRestore) {
+    const bsec = breakSec();
+    this.setState({
+      mode: 'break', total: bsec, remaining: bsec,
+      running: false, tickAt: 0, runId: null
+    }, { force: true });
+    if (!fromRestore) Toast.show('🍪 出炉！休息 ' + Store.data.settings.breakMinutes + ' 分钟吧');
+  },
+
   toggleRun() {
-    if (this.running) { this.pause(); return; }
-    if (this.mode === 'work') Sound._ensure();   // 用户手势里解锁音频
-    this.running = true;
-    this._tickAt = Date.now() + this.remaining * 1000;
-    this.timer = setInterval(() => this._step(), 250);
-    $('#startBtn').textContent = '暂停';
-    $('#ringWrap').classList.add('running');
-    this.renderTime();
-    this._persist(true);
-    this.pushState(true);
+    const s = this.state;
+    if (s.running) { this.pause(); return; }
+    if (s.mode === 'work') Sound._ensure();   // 用户手势里解锁音频
+    this.setState({
+      running: true,
+      tickAt: Date.now() + s.remaining * 1000,
+      runId: s.mode === 'work' ? (s.runId || genId('r_')) : null
+    }, { force: true });
+    this._startTimer();
   },
 
   pause() {
-    this.running = false;
-    clearInterval(this.timer);
-    $('#startBtn').textContent = '继续';
-    $('#ringWrap').classList.remove('running');
-    this.renderTime();
-    this._persist(true);
-    this.pushState(true);
-    if (typeof CloudSync !== 'undefined') CloudSync.applyPending();
+    this._stopTimer();
+    this.setState({ running: false, tickAt: 0 }, { force: true });
+    CloudSync.applyPending();
   },
 
-  reset() {
-    this.running = false;
-    clearInterval(this.timer);
-    this.mode = 'work';
-    this.total = this.remaining = Store.data.settings.workMinutes * 60;
-    $('#startBtn').textContent = '开始专注';
-    $('#resetBtn').textContent = '重置';
-    $('#ringWrap').classList.remove('running', 'break');
-    $('#focusTip').textContent = '出炉后会有提示音，可以休息 ' + Store.data.settings.breakMinutes + ' 分钟';
-    this.renderTime();
-    this._persist(true);
-    this.pushState(true);
-    if (typeof CloudSync !== 'undefined') CloudSync.applyPending();
+  reset(opts) {
+    this._stopTimer();
+    const wsec = workSec();
+    const o = opts || {};
+    this.setState({
+      mode: 'work', total: wsec, remaining: wsec,
+      running: false, tickAt: 0, runId: null
+    }, { force: true, persist: o.persist !== false, push: o.push !== false });
+    if (o.persist !== false) CloudSync.applyPending();
   },
 
   _step() {
-    const leftMs = this._tickAt - Date.now();
-    this.remaining = Math.max(0, Math.round(leftMs / 1000));
-    if (leftMs <= 0) { this._complete(); return; }
-    this.renderTime();
+    const left = this.state.tickAt - Date.now();
+    if (left <= 0) { this._complete(); return; }
+    this.setState({ remaining: Math.ceil(left / 1000) });
   },
 
   _complete() {
-    clearInterval(this.timer);
-    this.running = false;
-    $('#ringWrap').classList.remove('running');
-
-    if (this.mode === 'work') {
-      const minutes = Math.round(this.total / 60);
-      const date = todayStr();
-      Store.data.stats.dailyTomatoes[date] = (Store.data.stats.dailyTomatoes[date] || 0) + 1;
-      Store.data.stats.dailyMinutes[date] = (Store.data.stats.dailyMinutes[date] || 0) + minutes;
-      if (this.taskId) Tasks.addPomo(this.taskId);
-      Store.save();
-      renderStats();
+    this._stopTimer();
+    const s = this.state;
+    if (s.mode === 'work') {
+      Stats.recordTomato(1, s.taskId, s.runId);
       Sound.workDone();
-
-      // 进入休息
-      this.mode = 'break';
-      this.total = this.remaining = Store.data.settings.breakMinutes * 60;
-      $('#ringWrap').classList.add('break');
-      $('#startBtn').textContent = '开始休息';
-      $('#resetBtn').textContent = '跳过休息';
-      $('#focusTip').textContent = '点击「跳过休息」直接进入下一轮';
-      Toast.show('🍪 出炉！休息 ' + Store.data.settings.breakMinutes + ' 分钟吧');
+      this._toBreak(false);
     } else {
       Sound.breakDone();
       Toast.show('休息结束，准备烤下一块');
       this.reset();
     }
-    this.renderTime();
-    this._persist(true);
-    this.pushState(true);
-  },
-
-  renderTime() {
-    $('#ringTime').textContent = formatTime(this.remaining);
-    const offset = CIRCUMFERENCE * (1 - this.remaining / this.total);
-    $('#ringBar').style.strokeDashoffset = offset;
-    document.title = (this.running ? formatTime(this.remaining) + ' · ' : '') + '饼控自律 2.0';
-    if (this.mode === 'break') {
-      $('#startBtn').textContent = this.running ? '暂停休息' : (this.remaining < this.total ? '继续休息' : '开始休息');
-    }
-    PipUI.render();
-    this._persist();
-    this.pushState();
   },
 
   /* 推送当前专注状态：Tauri 环境直接广播给悬浮窗；浏览器版走本地服务器桥
@@ -1726,16 +1926,18 @@ const Pomodoro = {
   pushState(force) {
     if (!force && this._lastPush && Date.now() - this._lastPush < 900) return;
     this._lastPush = Date.now();
-    const t = Store.data.tasks.find(x => x.id === this.taskId);
+    const s = this.state;
+    const t = s.taskId ? Store.data.tasks.find(x => x.id === s.taskId) : null;
     const payload = {
       task: t ? t.title : null,
       pomos: t ? t.pomos || 0 : 0,
       target: t ? Math.max(1, t.targetPomos || 1) : 0,
-      mode: this.mode,
-      total: this.total,
-      remaining: this.remaining,
-      running: this.running,
-      tickAt: this.running ? this._tickAt : 0,
+      mode: s.mode,
+      total: s.total,
+      remaining: s.remaining,
+      running: s.running,
+      tickAt: s.running ? s.tickAt : 0,
+      workMinutes: Store.data.settings.workMinutes,
       theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
     };
     if (window.__TAURI__) {
@@ -1768,7 +1970,7 @@ function renderStats() {
   for (let i = 0; i < 7; i++) {
     const dd = new Date(now0);
     dd.setDate(now0.getDate() - i);
-    week += d.dailyTomatoes[dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') + '-' + String(dd.getDate()).padStart(2, '0')] || 0;
+    week += d.dailyTomatoes[dateKey(dd)] || 0;
   }
   $('#dockTrendMini').textContent = week > 0 ? '7天 ' + week + ' 块' : '';
 }
@@ -1783,7 +1985,7 @@ function renderDockHeat() {
   for (let i = 15; i >= 0; i--) {
     const day = new Date(now);
     day.setDate(now.getDate() - i);
-    const key = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
+    const key = dateKey(day);
     const n = stats[key] || 0;
     const dot = document.createElement('i');
     dot.className = n === 0 ? '' : n <= 2 ? 'l1' : n <= 4 ? 'l2' : 'l3';
@@ -1872,7 +2074,7 @@ const Cal = {
     let monthTotal = 0;
     const tKey = todayStr();
     for (let d = 1; d <= daysInMonth; d++) {
-      const key = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      const key = dateKey(new Date(y, m, d));
       const n = stats[key] || 0;
       monthTotal += n;
       const cell = document.createElement('div');
@@ -1911,7 +2113,7 @@ const Trend = {
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
-      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const key = dateKey(d);
       data.push({ label: (d.getMonth() + 1) + '/' + d.getDate(), n: stats[key] || 0, today: i === 0 });
     }
     const total = data.reduce((s, x) => s + x.n, 0);
@@ -2037,6 +2239,93 @@ const Pies = {
 };
 
 /* ============================================================
+   多窗口协同
+   —— 数据：A 窗口写入 → storage 事件 → B 窗口只重载、不回写
+   —— 主窗口：localStorage 租约 + BroadcastChannel 通告；
+      只有主窗口自动上传云端，两个窗口不会抢着覆盖
+   ============================================================ */
+const Tabs = {
+  id: genId('w_'),
+  bc: null,
+  leader: false,
+  _hb: null,
+
+  init() {
+    if (typeof BroadcastChannel === 'function') {
+      try {
+        this.bc = new BroadcastChannel('bingkong');
+        this.bc.onmessage = e => {
+          const m = e.data;
+          if (m && m.type === 'leader' && m.id !== this.id) this.leader = false;
+        };
+      } catch (e) { this.bc = null; }
+    }
+    window.addEventListener('storage', e => {
+      if (e.key === LITE_KEY && e.newValue) this._reload(e.newValue);
+      else if (e.key === TIMER_KEY && e.newValue) this._mirrorTimer(e.newValue);
+    });
+    window.addEventListener('pagehide', () => this._release());
+    this._heartbeat();
+    this._hb = setInterval(() => this._heartbeat(), 2000);
+  },
+
+  /* 租约 6 秒过期；主窗口每 2 秒续一次 */
+  _heartbeat() {
+    const now = Date.now();
+    let cur = null;
+    try { cur = JSON.parse(localStorage.getItem(LEADER_KEY) || 'null'); } catch (e) { cur = null; }
+    if (!cur || cur.id === this.id || now - (Number(cur.ts) || 0) > 6000) {
+      try { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: this.id, ts: now })); } catch (e) {}
+      if (!this.leader) {
+        this.leader = true;
+        if (this.bc) { try { this.bc.postMessage({ type: 'leader', id: this.id }); } catch (e) {} }
+      }
+    } else if (this.leader) {
+      this.leader = false;
+    }
+  },
+
+  _release() {
+    try {
+      const cur = JSON.parse(localStorage.getItem(LEADER_KEY) || 'null');
+      if (cur && cur.id === this.id) localStorage.removeItem(LEADER_KEY);
+    } catch (e) { /* 忽略 */ }
+  },
+
+  /* 别的窗口改了数据：替换内存 + 重渲染，绝不再 save（否则两边来回打架） */
+  _reload(raw) {
+    try { Store.data = Store._normalize(JSON.parse(raw)); } catch (e) { return; }
+    applyTheme();
+    renderStats();
+    Tasks.render();
+    Pomodoro._labelSig = '';
+    Pomodoro._render();
+    if (Sheets.current === 'calSheet') Cal.render();
+    if (Sheets.current === 'trendSheet') Trend.render();
+    if (Sheets.current === 'pieSheet') Pies.render();
+  },
+
+  /* 别的窗口改了计时：只镜像「空闲/暂停」状态，跑动中的计时不抢也不回写 */
+  _mirrorTimer(raw) {
+    const s = Pomodoro.state;
+    if (s.running || s.remaining !== s.total) return;
+    let sv = null;
+    try { sv = JSON.parse(raw); } catch (e) { return; }
+    if (!sv || sv.running) return;
+    const total = Number(sv.total) > 0 ? Number(sv.total) : s.total;
+    Pomodoro.setState({
+      mode: sv.mode === 'break' ? 'break' : 'work',
+      total: total,
+      remaining: Math.max(0, Math.min(Number(sv.remaining) || 0, total)),
+      running: false,
+      tickAt: 0,
+      taskId: sv.taskId || null,
+      runId: sv.runId || null
+    }, { persist: false, push: false });
+  }
+};
+
+/* ============================================================
    主题
    ============================================================ */
 function applyTheme() {
@@ -2068,6 +2357,7 @@ Trend.init();
 Pies.init();
 CloudSync.init();
 Topup.init();
+Tabs.init();
 
 $('#themeBtn').addEventListener('click', toggleTheme);
 $('#pipBtn').addEventListener('click', () => {
