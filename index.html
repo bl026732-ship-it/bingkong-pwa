@@ -690,7 +690,7 @@ body::after {
   .dock-heat, .dock-total, .dock-title { display: none; }
   .dock-title-sm { display: inline; }
   /* 抽屉近乎全屏 */
-  .cal-sheet { width: 100vw; padding: 16px 12px 22px; border-radius: 22px 22px 0 0; }
+  .cal-sheet { width: 100%; padding: 16px 12px 22px; border-radius: 22px 22px 0 0; }
   .cal-cell { min-height: 50px; padding: 6px 7px; border-radius: 10px; }
   .cal-cell .n { font-size: 17px; }
   .pie-list { max-height: 52vh; }
@@ -703,6 +703,72 @@ body::after {
 @media (pointer: coarse) {
   .task-del, .task-op, .pomo-pm { opacity: .75; }
   .dock:hover { transform: none; }
+}
+/* ============================================================
+   移动端防溢出 & 对齐加固（2026-11-01）
+   背景：安卓 Chrome 的「文字缩放」只放大文字、不放大布局宽度；
+   flex 子项默认 min-width:auto 不肯收缩，容器被文字撑破，
+   再被 overflow-x:hidden 静默裁掉 —— 表现就是右侧内容凭空消失。
+   ============================================================ */
+
+/* 1) 横向 flex 容器一律允许子项收缩 */
+.main, .card, .card-title, .task-input-row, .task-item,
+.task-main, .task-meta, .pool-switch, .dock-row, .topbar { min-width: 0; }
+
+/* 2) 卡片标题行：左标题 + 右提示，谁超长谁省略，绝不顶破卡片 */
+.card-title > span,
+.card-title small {
+  min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.card-title > span { flex: 0 1 auto; }
+.card-title small {
+  flex: 0 1 auto; margin-left: 12px;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+
+/* 3) 三个池标签：严格三等分，标签字号不跟随系统放大，保证胶囊不变形 */
+.pool-switch { overflow: hidden; }
+.seg {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+
+/* 4) 输入框与主按钮：永远不超过容器宽度 */
+.task-input-row { align-items: stretch; }
+.task-input  { min-width: 0; max-width: 100%; }
+.btn-primary { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* 5) 任务行：番茄点 + 操作按钮放不下时换行，不撑破卡片 */
+.task-meta { flex-wrap: wrap; row-gap: 6px; }
+.task-meta .task-del { margin-left: auto; }
+.task-text { overflow-wrap: anywhere; }
+
+/* 6) 底部把手：等宽三等分，名称不放大，超长省略 */
+.dock {
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 7) 顶栏：文字先省略，图标按钮不参与压缩；放不下时整行下移，不硬挤 */
+.brand { min-width: 0; overflow: hidden; }
+.topbar { flex-wrap: wrap; row-gap: 6px; }
+.topbar-stats { min-width: 0; overflow: hidden; margin-left: auto; }
+.topbar-stats > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-stats .chip,
+.topbar-stats .icon-btn { flex-shrink: 0; }
+
+/* 8) 日历格子：数字不跟随系统放大，格子允许裁切不留横溢 */
+.cal-cell {
+  min-width: 0; overflow: hidden;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+.cal-dow { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* 9) 超窄屏（≤360px）：顶栏改为两行，宁可高一点也不横向溢出 */
+@media (max-width: 360px) {
+  .topbar { flex-wrap: wrap; row-gap: 6px; }
+  .topbar-stats { flex-basis: 100%; justify-content: flex-end; }
 }
 </style>
 </head>

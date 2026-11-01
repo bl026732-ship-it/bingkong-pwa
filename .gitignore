@@ -4,3 +4,4 @@ _lite_check.js
 .kimi-code/
 src-tauri/target/
 .workbuddy/
+sync-last.log
