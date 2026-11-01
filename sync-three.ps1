@@ -8,6 +8,9 @@
     同步三端.bat "改了什么"                   （自定义提交说明）
     powershell -File sync-three.ps1 -SkipBuild
     powershell -File sync-three.ps1 -AllowRunning   （仅供排查，正常不要用）
+
+  推送兜底：git push 不通时会自动改用 GitHub API 通道（push-via-api.js），
+            只要 api.github.com 可达就能推上去；两条路都不通才中止。
 #>
 param(
   [Parameter(Position = 0)][string]$Message = "",
@@ -104,12 +107,44 @@ Head "第 3 步 / 6   推送到 GitHub"
 if ($CheckOnly) { Info "检查模式，跳过推送" }
 else {
   $pushOut = git push origin main 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    $pushOut | Select-Object -Last 8 | ForEach-Object { Info $_ }
-    Abort "git push 失败（网络或凭据问题）"
+  if ($LASTEXITCODE -eq 0) {
+    $head = (git rev-parse --short HEAD).Trim()
+    Ok "已推送，当前提交 $head"
   }
-  $head = (git rev-parse --short HEAD).Trim()
-  Ok "已推送，当前提交 $head"
+  else {
+    Warn "git push 不通（github.com 直连/代理失败），改用 API 通道"
+    $pushOut | Select-Object -Last 4 | ForEach-Object { Info ("$_") }
+    $apiScript = Join-Path $root "push-via-api.js"
+    if (-not (Test-Path $apiScript)) { Abort "找不到 push-via-api.js，无法走兜底通道" }
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Abort "找不到 node，无法走兜底通道" }
+
+    $apiOk = $false
+    try {
+      $probe = Invoke-WebRequest -Uri "https://api.github.com/repos/bl026732-ship-it/bingkong-pwa" -UseBasicParsing -TimeoutSec 15
+      $apiOk = ($probe.StatusCode -eq 200)
+    } catch { $apiOk = $false }
+    if (-not $apiOk) { Abort "api.github.com 也不可达，网络整体不通，稍后再试" }
+    Info "api.github.com 可用，正在用 Git Data API 复刻当前提交……"
+
+    $token = $null
+    try {
+      $credIn = "protocol=https`nhost=github.com`n`n"
+      $credOut = $credIn | git credential fill 2>$null
+      $passLine = $credOut | Where-Object { "$_" -match '^password=' } | Select-Object -First 1
+      if ($passLine) { $token = $passLine.ToString().Substring(9) }
+    } catch { $token = $null }
+    if (-not $token) { Abort "取不到 GitHub 凭据，无法走 API 通道" }
+
+    $oldToken = $env:GITHUB_TOKEN
+    $env:GITHUB_TOKEN = $token
+    $apiOut = & node $apiScript 2>&1
+    $apiCode = $LASTEXITCODE
+    if ($null -eq $oldToken) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue } else { $env:GITHUB_TOKEN = $oldToken }
+    $apiOut | ForEach-Object { Info ("$_") }
+    if ($apiCode -ne 0) { Abort "API 通道也没成功（退出码 $apiCode），详见上方输出" }
+    $head = (git rev-parse --short HEAD).Trim()
+    Ok "已通过 API 通道推送，当前提交 $head"
+  }
 }
 
 # ---------- 4. 等 Pages 构建 ----------
