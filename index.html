@@ -2449,6 +2449,13 @@ if (window.__TAURI__ && window.__TAURI__.event) {
     Pomodoro._lastPush = 0;
     Pomodoro.pushState(true);
   });
+
+  /* 悬浮窗里的 ▶/⏸ 只发信号，真正的暂停/继续在这里执行（计时单源） */
+  window.__TAURI__.event.listen('focus-toggle', () => {
+    console.log('[main] 收到 focus-toggle');
+    Pomodoro.toggleRun();
+    Pomodoro.pushState(true);
+  });
 }
 </script>
 </body>

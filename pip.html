@@ -88,8 +88,7 @@ body.break .time {
   background: linear-gradient(120deg, #C9F7D4, var(--green-2) 50%, var(--green));
   -webkit-background-clip: text; background-clip: text;
 }
-.btns { display: flex; gap: 6px; opacity: 0; transition: opacity .2s; flex-shrink: 0; app-region: no-drag; -webkit-app-region: no-drag; }
-body:hover .btns { opacity: 1; }
+.btns { display: flex; gap: 6px; flex-shrink: 0; app-region: no-drag; -webkit-app-region: no-drag; }
 .btns button {
   width: 26px; height: 26px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
@@ -101,6 +100,33 @@ body:hover .btns { opacity: 1; }
 }
 .btns button:hover { background: rgba(255,255,255,.15); color: #fff; }
 #closeBtn:hover { background: rgba(255,69,58,.28); color: #FF6B61; border-color: transparent; }
+
+/* ✕ 保持「悬停才现」，但位置常驻，避免出现时把 ▶/⏸ 挤动 */
+#closeBtn { opacity: 0; pointer-events: none; transition: opacity .2s, background .15s, color .15s; }
+body:hover #closeBtn { opacity: 1; pointer-events: auto; }
+
+/* ▶ / ⏸ 常显：暂停是高频操作，藏起来等于没有（用 CSS 画，避免字体缺字形） */
+#runBtn { opacity: .75; }
+body:hover #runBtn { opacity: 1; }
+#runBtn .ic { position: relative; width: 10px; height: 11px; display: block; }
+#runBtn .ic::before, #runBtn .ic::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 3px;
+  border-radius: 1px; background: currentColor;
+}
+#runBtn .ic::before { left: 0; }
+#runBtn .ic::after { right: 0; }
+/* 未运行时（paused）→ 变成播放三角 */
+body.paused #runBtn .ic::before {
+  left: 1px; top: 0; bottom: auto; width: 0; height: 0; background: none;
+  border-left: 9px solid currentColor;
+  border-top: 5.5px solid transparent; border-bottom: 5.5px solid transparent;
+  border-radius: 0;
+}
+body.paused #runBtn .ic::after { display: none; }
+/* 暂停中：时间数字压暗，一眼看出「停着的」 */
+body.paused .time { opacity: .42; }
+/* 主窗口没连上：按钮失效 */
+body.offline #runBtn { opacity: .25; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -113,6 +139,7 @@ body:hover .btns { opacity: 1; }
   <div class="time-row" data-tauri-drag-region>
     <div class="time" id="time">--:--</div>
     <div class="btns">
+      <button id="runBtn" title="暂停 / 继续"><i class="ic"></i></button>
       <button id="closeBtn" title="收起悬浮窗">✕</button>
     </div>
   </div>
@@ -203,8 +230,20 @@ function loop() {
   $('#time').textContent = offline ? '--:--' : fmt(dispRemaining);
   $('#fill').style.width = (offline ? 0 : dispRemaining / (dispTotal || 1) * 100) + '%';
   document.body.classList.toggle('break', !offline && dispMode === 'break');
+  const pausedNow = !offline && remote && !remote.running;
+  document.body.classList.toggle('paused', !!pausedNow);
+  document.body.classList.toggle('offline', offline);
+  const rb = $('#runBtn');
+  if (rb) rb.title = offline ? '主窗口未连接' : (remote.running ? '暂停' : '继续');
   document.title = (!offline && remote && remote.running ? fmt(dispRemaining) + ' · ' : '') + '饼控悬浮窗';
 }
+
+/* ▶ / ⏸ = 暂停 / 继续：只发信号，计时逻辑永远留在主窗口（单源，不会两边打架） */
+$('#runBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (offline || !isTauri) return;
+  window.__TAURI__.event.emit('focus-toggle').catch(() => {});
+});
 
 /* ✕ = 收起悬浮窗（应用还在主窗口里跑着） */
 $('#closeBtn').addEventListener('click', () => {

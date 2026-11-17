@@ -34,7 +34,7 @@ if (-not ($env:Path -like "*Program Files\nodejs*")) {
 }
 
 $LIVE   = "https://bl026732-ship-it.github.io/bingkong-pwa"
-$FILES  = @("index.html", "sw.js")
+$FILES  = @("index.html", "pip.html", "sw.js")
 $EXE    = Join-Path $root "src-tauri\target\release\app.exe"
 $TMPDIR = Join-Path $env:TEMP "bk_live_check"
 
