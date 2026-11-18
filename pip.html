@@ -7,9 +7,10 @@
 :root {
   --accent: #FFB340; --accent-2: #FF7A00;
   --green: #30D158; --green-2: #7BE495;
+  --a: .85;                /* 底色不透明度，由设置驱动 */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+html, body { height: 100%; width: 100%; }
 body {
   font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: transparent;
@@ -17,28 +18,29 @@ body {
   overflow: hidden;
   user-select: none; -webkit-user-select: none;
   position: relative;
+  -webkit-text-size-adjust: 100%;
 }
 .win {
   position: absolute; inset: 0;
   border-radius: 16px;
-  background: linear-gradient(165deg, rgba(26,26,32,.92), rgba(15,15,19,.95));
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(165deg, rgba(28,28,34,var(--a)), rgba(16,16,20,var(--a)));
   border: 1px solid rgba(255,255,255,.09);
-  box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  box-shadow: 0 12px 40px rgba(0,0,0,.45);
   display: flex; flex-direction: column; justify-content: center;
   gap: 4px; padding: 10px 16px 12px;
   overflow: hidden;
-  animation: fadeIn .35s ease;
-  app-region: drag; -webkit-app-region: drag;
+  animation: fadeIn .3s ease;
 }
 @keyframes fadeIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 .win::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.18), transparent 65%);
+  background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.16), transparent 65%);
 }
 body.break .win::before {
-  background: radial-gradient(220px 120px at 12% -35%, rgba(48,209,88,.16), transparent 65%);
+  background: radial-gradient(220px 120px at 12% -35%, rgba(48,209,88,.14), transparent 65%);
 }
+
+/* ---------- 自由态 ---------- */
 .track { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.08); }
 .track i {
   display: block; height: 100%; width: 0;
@@ -46,10 +48,11 @@ body.break .win::before {
   transition: width .5s linear;
 }
 body.break .track i { background: linear-gradient(90deg, var(--green-2), var(--green)); }
+
 .task-row { position: relative; display: flex; align-items: center; gap: 6px; min-height: 20px; }
 #taskText {
   font-size: 11px; color: #B9B9C0;
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #taskText.empty { color: #6A6A72; }
 #dot {
@@ -57,26 +60,8 @@ body.break .track i { background: linear-gradient(90deg, var(--green-2), var(--g
   background: #FF453A; flex-shrink: 0;
   box-shadow: 0 0 6px currentColor;
   transition: background .3s;
-  app-region: no-drag; -webkit-app-region: no-drag;
 }
 
-/* ---------- 浅色主题（跟随主窗口） ---------- */
-body[data-theme="light"] .win {
-  background: linear-gradient(165deg, rgba(255,255,255,.9), rgba(244,241,236,.94));
-  border-color: rgba(60,50,40,.1);
-  box-shadow: 0 12px 40px rgba(120,90,50,.2);
-}
-body[data-theme="light"] .win::before {
-  background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.2), transparent 65%);
-}
-body[data-theme="light"] #taskText { color: #7A756E; }
-body[data-theme="light"] .track { background: rgba(0,0,0,.09); }
-body[data-theme="light"] .btns button {
-  background: rgba(0,0,0,.05);
-  border-color: rgba(0,0,0,.09);
-  color: #8A857E;
-}
-body[data-theme="light"] .btns button:hover { background: rgba(0,0,0,.1); color: #221E1A; }
 .time-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .time {
   font-size: 36px; font-weight: 250; letter-spacing: -0.03em; line-height: 1.1;
@@ -88,24 +73,20 @@ body.break .time {
   background: linear-gradient(120deg, #C9F7D4, var(--green-2) 50%, var(--green));
   -webkit-background-clip: text; background-clip: text;
 }
-.btns { display: flex; gap: 6px; flex-shrink: 0; app-region: no-drag; -webkit-app-region: no-drag; }
+
+.btns { display: flex; gap: 6px; flex-shrink: 0; }
 .btns button {
   width: 26px; height: 26px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
   color: #C9C9CF; font-size: 12px; cursor: pointer;
-  font-family: inherit;
-  transition: all .15s;
-  app-region: no-drag; -webkit-app-region: no-drag;
+  font-family: inherit; transition: all .15s;
 }
 .btns button:hover { background: rgba(255,255,255,.15); color: #fff; }
 #closeBtn:hover { background: rgba(255,69,58,.28); color: #FF6B61; border-color: transparent; }
-
-/* ✕ 保持「悬停才现」，但位置常驻，避免出现时把 ▶/⏸ 挤动 */
+/* ✕ 悬停才现，但位置常驻，避免出现时挤动 ▶/⏸ */
 #closeBtn { opacity: 0; pointer-events: none; transition: opacity .2s, background .15s, color .15s; }
 body:hover #closeBtn { opacity: 1; pointer-events: auto; }
-
-/* ▶ / ⏸ 常显：暂停是高频操作，藏起来等于没有（用 CSS 画，避免字体缺字形） */
 #runBtn { opacity: .75; }
 body:hover #runBtn { opacity: 1; }
 #runBtn .ic { position: relative; width: 10px; height: 11px; display: block; }
@@ -115,7 +96,6 @@ body:hover #runBtn { opacity: 1; }
 }
 #runBtn .ic::before { left: 0; }
 #runBtn .ic::after { right: 0; }
-/* 未运行时（paused）→ 变成播放三角 */
 body.paused #runBtn .ic::before {
   left: 1px; top: 0; bottom: auto; width: 0; height: 0; background: none;
   border-left: 9px solid currentColor;
@@ -123,26 +103,166 @@ body.paused #runBtn .ic::before {
   border-radius: 0;
 }
 body.paused #runBtn .ic::after { display: none; }
-/* 暂停中：时间数字压暗，一眼看出「停着的」 */
-body.paused .time { opacity: .42; }
-/* 主窗口没连上：按钮失效 */
 body.offline #runBtn { opacity: .25; pointer-events: none; }
+
+/* ---------- 贴边态：胶囊 / 完整球 ---------- */
+.dock-ui {
+  display: none; position: relative;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; width: 100%; height: 100%;
+  cursor: grab;
+}
+.dock-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  color: #F4F4F7;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,.45);
+}
+.dock-sub { font-size: 10px; color: #A0A0A8; letter-spacing: .02em; }
+body.break .dock-time { color: #D6F7DE; }
+
+body[data-mode="ball"] .dock-time { font-size: 27px; }
+body[data-mode="capsule"] .dock-time { font-size: 19px; }
+/* 左右贴边：时间旋转 90°，在 34px 宽的竖条里完整显示 */
+body[data-mode="capsule"][data-edge="left"] .dock-time,
+body[data-mode="capsule"][data-edge="right"] .dock-time { transform: rotate(90deg); }
+
+body[data-mode="capsule"] .win,
+body[data-mode="ball"] .win { padding: 0; gap: 0; box-shadow: 0 3px 12px rgba(0,0,0,.22); }
+/* 球/胶囊贴边时常压在浅色壁纸或白色文档上，靠一圈看得见的描边保证边界清晰 */
+body[data-mode="ball"] .win,
+body[data-mode="capsule"] .win { border-width: 1.5px; }
+body[data-theme="dark"][data-mode="ball"] .win,
+body[data-theme="dark"][data-mode="capsule"] .win { border-color: rgba(255,255,255,.18); }
+body[data-theme="light"][data-mode="ball"] .win,
+body[data-theme="light"][data-mode="capsule"] .win { border-color: rgba(58,46,34,.22); }
+
+/* 胶囊贴边：朝屏幕外的一侧不圆角，朝内一侧圆角 */
+body[data-mode="capsule"][data-edge="left"] .win { border-radius: 0 18px 18px 0; border-left: none; }
+body[data-mode="capsule"][data-edge="right"] .win { border-radius: 18px 0 0 18px; border-right: none; }
+body[data-mode="capsule"][data-edge="top"] .win { border-radius: 0 0 18px 18px; border-top: none; }
+body[data-mode="capsule"][data-edge="bottom"] .win { border-radius: 18px 18px 0 0; border-bottom: none; }
+body[data-mode="ball"] .win { border-radius: 50%; }
+
+body[data-mode="free"] .dock-ui { display: none; }
+body[data-mode="capsule"] .free-ui,
+body[data-mode="ball"] .free-ui,
+body[data-mode="menu"] .free-ui,
+body[data-mode="menu"] .dock-ui { display: none; }
+body[data-mode="capsule"] .track,
+body[data-mode="ball"] .track,
+body[data-mode="menu"] .track { display: none; }
+body[data-mode="capsule"] .dock-ui,
+body[data-mode="ball"] .dock-ui { display: flex; }
+body[data-mode="capsule"] .dock-sub { display: none; }
+
+/* ---------- 右键菜单 ---------- */
+.menu { display: none; position: relative; width: 100%; height: 100%; padding: 9px; }
+body[data-mode="menu"] .menu { display: flex; flex-direction: column; gap: 7px; }
+body[data-mode="menu"] .win { padding: 0; gap: 0; }
+.m-title { font-size: 9px; color: #83838C; letter-spacing: .08em; margin-bottom: 4px; }
+.m-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.m-chip {
+  height: 24px; border-radius: 7px; font-family: inherit; font-size: 11px;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.09);
+  color: #C9C9CF; cursor: pointer; transition: all .14s;
+}
+.m-chip:hover { background: rgba(255,255,255,.14); color: #fff; }
+.m-chip.on { background: rgba(255,179,64,.22); border-color: rgba(255,179,64,.5); color: #FFD79A; }
+.m-acts { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.m-act {
+  height: 26px; border-radius: 7px; text-align: left; padding: 0 9px;
+  font-family: inherit; font-size: 11.5px; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+  color: #D6D6DC; transition: all .14s;
+}
+.m-act:hover { background: rgba(255,255,255,.13); color: #fff; }
+.m-act.danger:hover { background: rgba(255,69,58,.26); color: #FF8D85; border-color: transparent; }
+
+/* 复制提示 */
+.flash {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%) translateY(4px);
+  font-size: 10px; padding: 3px 8px; border-radius: 20px;
+  background: rgba(48,209,88,.92); color: #06340F; font-weight: 600;
+  opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none;
+  white-space: nowrap;
+}
+.flash.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+body[data-mode="capsule"] .flash { display: none; }
+
+/* ---------- 浅色主题 ---------- */
+body[data-theme="light"] .win {
+  background: linear-gradient(165deg, rgba(252,250,247,var(--a)), rgba(237,231,222,var(--a)));
+  border-color: rgba(60,50,40,.16);
+  box-shadow: 0 12px 40px rgba(120,90,50,.2);
+}
+body[data-theme="light"] .win::before {
+  background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.2), transparent 65%);
+}
+body[data-theme="light"] #taskText { color: #7A756E; }
+body[data-theme="light"] .track { background: rgba(0,0,0,.09); }
+body[data-theme="light"] .btns button { background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.09); color: #8A857E; }
+body[data-theme="light"] .btns button:hover { background: rgba(0,0,0,.1); color: #221E1A; }
+body[data-theme="light"] .dock-time { color: #2A2622; text-shadow: none; }
+body[data-theme="light"] .dock-sub { color: #7C776F; }
+body[data-theme="light"] .m-title { color: #8E8880; }
+body[data-theme="light"] .m-chip { background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.08); color: #5B564F; }
+body[data-theme="light"] .m-chip.on { background: rgba(255,160,40,.2); border-color: rgba(255,150,30,.5); color: #A85D00; }
+body[data-theme="light"] .m-act { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.07); color: #443F3A; }
 </style>
 </head>
-<body>
+<body data-mode="free" data-edge="right" data-theme="dark">
 <div class="win">
   <div class="track"><i id="fill"></i></div>
-  <div class="task-row">
-    <span id="taskText">等待主窗口…</span>
-    <span id="dot" title="与主窗口的连接状态"></span>
-  </div>
-  <div class="time-row" data-tauri-drag-region>
-    <div class="time" id="time">--:--</div>
-    <div class="btns">
-      <button id="runBtn" title="暂停 / 继续"><i class="ic"></i></button>
-      <button id="closeBtn" title="收起悬浮窗">✕</button>
+
+  <div class="free-ui">
+    <div class="task-row">
+      <span id="taskText">等待主窗口…</span>
+      <span id="dot" title="与主窗口的连接状态"></span>
+    </div>
+    <div class="time-row">
+      <div class="time" id="time">--:--</div>
+      <div class="btns">
+        <button id="runBtn" title="暂停 / 继续"><i class="ic"></i></button>
+        <button id="closeBtn" title="收起悬浮窗">✕</button>
+      </div>
     </div>
   </div>
+
+  <div class="dock-ui" id="dockUI">
+    <div class="dock-time" id="dockTime">25:00</div>
+    <div class="dock-sub" id="dockSub">专注中</div>
+  </div>
+
+  <div class="menu" id="menu">
+    <div>
+      <div class="m-title">贴边方向</div>
+      <div class="m-chips">
+        <button class="m-chip" data-act="edge" data-val="left">左</button>
+        <button class="m-chip" data-act="edge" data-val="right">右</button>
+        <button class="m-chip" data-act="edge" data-val="top">上</button>
+        <button class="m-chip" data-act="edge" data-val="bottom">下</button>
+      </div>
+    </div>
+    <div>
+      <div class="m-title">透明度</div>
+      <div class="m-chips">
+        <button class="m-chip" data-act="opacity" data-val="50">50</button>
+        <button class="m-chip" data-act="opacity" data-val="70">70</button>
+        <button class="m-chip" data-act="opacity" data-val="85">85</button>
+        <button class="m-chip" data-act="opacity" data-val="100">100</button>
+      </div>
+    </div>
+    <div class="m-acts">
+      <button class="m-act" data-act="run" id="mRun">暂停</button>
+      <button class="m-act" data-act="free">还原成小窗</button>
+      <button class="m-act" data-act="hide">收起悬浮窗</button>
+      <button class="m-act danger" data-act="quit">退出应用</button>
+    </div>
+  </div>
+
+  <div class="flash" id="flash"></div>
 </div>
 
 <script>
@@ -152,14 +272,20 @@ if (!window.__pipBooted) {
   (function () {
 'use strict';
 /* 镜像模式：实时显示主窗口广播的专注状态。
-   Tauri 环境用原生事件收听（零延迟）；浏览器兜底走 localhost:8520 轮询。 */
+   Tauri 环境用原生事件收听（零延迟）；浏览器兜底走 localhost:8520 轮询。
+   形态（自由小窗 / 贴边胶囊 / 完整球 / 菜单）由 Rust 侧决定，这里只负责画。 */
 const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
 const API = 'http://localhost:8520/api/focus';
-const isTauri = !!(window.__TAURI__ && window.__TAURI__.event);
+const T = window.__TAURI__ || null;
+const isTauri = !!(T && T.core && T.core.invoke);
+const invoke = (cmd, args) => (isTauri ? T.core.invoke(cmd, args) : Promise.resolve(null));
+
 let remote = null;
 let offline = true;
 let dispRemaining = 0, dispTotal = 1, dispMode = 'work';
 let prevMode = null;
+let ui = { mode: 'free', edge: 'right', opacity: 85 };
 
 /* 完成提醒音（Web Audio，无外部文件） */
 const Sound = {
@@ -219,6 +345,13 @@ function renderTask() {
   else { el.textContent = '自由专注'; el.className = 'empty'; }
 }
 
+function subLabel() {
+  if (offline) return '未连接';
+  if (dispMode === 'break') return '休息中';
+  if (remote && remote.running) return '专注中';
+  return dispRemaining < dispTotal ? '已暂停' : '待开始';
+}
+
 function loop() {
   if (!offline && remote) {
     if (remote.running && remote.tickAt) {
@@ -227,54 +360,139 @@ function loop() {
       dispRemaining = remote.remaining;
     }
   }
-  $('#time').textContent = offline ? '--:--' : fmt(dispRemaining);
+  const txt = offline ? '--:--' : fmt(dispRemaining);
+  $('#time').textContent = txt;
+  $('#dockTime').textContent = txt;
+  $('#dockSub').textContent = subLabel();
   $('#fill').style.width = (offline ? 0 : dispRemaining / (dispTotal || 1) * 100) + '%';
+
   document.body.classList.toggle('break', !offline && dispMode === 'break');
   const pausedNow = !offline && remote && !remote.running;
   document.body.classList.toggle('paused', !!pausedNow);
   document.body.classList.toggle('offline', offline);
+
   const rb = $('#runBtn');
   if (rb) rb.title = offline ? '主窗口未连接' : (remote.running ? '暂停' : '继续');
-  document.title = (!offline && remote && remote.running ? fmt(dispRemaining) + ' · ' : '') + '饼控悬浮窗';
+  const mr = $('#mRun');
+  if (mr && ui.mode === 'menu') mr.textContent = (remote && remote.running) ? '暂停' : '继续';
+
+  const prefix = (!offline && remote && remote.running) ? txt + ' · ' : '';
+  document.title = prefix + '饼控悬浮窗';
 }
 
-/* ▶ / ⏸ = 暂停 / 继续：只发信号，计时逻辑永远留在主窗口（单源，不会两边打架） */
+/* ---------- 形态 ---------- */
+function applyMode(ev) {
+  if (!ev) return;
+  ui = { mode: ev.mode, edge: ev.edge, opacity: ev.opacity };
+  const b = document.body;
+  b.dataset.mode = ev.mode;
+  b.dataset.edge = ev.edge;
+  document.documentElement.style.setProperty('--a', (ev.opacity / 100).toFixed(2));
+  if (ev.mode === 'menu') syncMenu();
+  loop();
+}
+
+function syncMenu() {
+  $$('.m-chip').forEach(c => {
+    const act = c.dataset.act;
+    if (act === 'edge') c.classList.toggle('on', c.dataset.val === ui.edge);
+    if (act === 'opacity') c.classList.toggle('on', Number(c.dataset.val) === ui.opacity);
+  });
+}
+
+/* ---------- 复制倒计时 ---------- */
+let flashTimer = null;
+function flash(msg) {
+  const el = $('#flash');
+  el.textContent = msg;
+  el.classList.add('on');
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => el.classList.remove('on'), 1200);
+}
+
+function copyTime() {
+  const txt = $('#dockTime').textContent;
+  if (!txt || txt === '--:--') return;
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  flash(ok ? '已复制 ' + txt : '复制失败');
+}
+
+/* ---------- 贴边态：拖动 / 双击复制 / 右键 ---------- */
+/* 自由小窗：整个窗口都能拖（按钮除外），拖到离屏幕边 <60px 会自己吸成球 */
+$('.win').addEventListener('mousedown', (e) => {
+  if (!isTauri || e.button !== 0) return;
+  if (document.body.dataset.mode !== 'free') return;
+  if (e.target.closest('button')) return;
+  e.preventDefault();
+  invoke('ball_drag');
+});
+
+let lastDown = 0;
+$('#dockUI').addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || !isTauri) return;
+  const now = Date.now();
+  if (now - lastDown < 330) { lastDown = 0; copyTime(); return; }  // 双击：复制，不拖
+  lastDown = now;
+  invoke('ball_drag');
+});
+
+document.addEventListener('contextmenu', (e) => {
+  if (!isTauri) return;
+  const m = document.body.dataset.mode;
+  if (m === 'free') return;                 // 小窗态不弹菜单
+  e.preventDefault();
+  invoke('ball_menu', { open: m !== 'menu' });
+});
+
+$('#menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (!b) { invoke('ball_menu', { open: false }); return; }   // 点空白关掉
+  invoke('ball_action', { id: b.dataset.act, value: b.dataset.val || null });
+});
+
+/* ---------- 自由态按钮 ---------- */
 $('#runBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   if (offline || !isTauri) return;
-  window.__TAURI__.event.emit('focus-toggle').catch(() => {});
+  T.event.emit('focus-toggle').catch(() => {});
 });
 
-/* ✕ = 收起悬浮窗（应用还在主窗口里跑着） */
 $('#closeBtn').addEventListener('click', () => {
   if (isTauri) {
-    window.__TAURI__.event.emit('toggle-pip').catch(() => {});
+    T.event.emit('toggle-pip').catch(() => {});
   } else {
     window.close();
   }
 });
 
+/* ---------- 连线 ---------- */
 if (isTauri) {
-  /* 收听主窗口广播（注册成功后请求一次当前状态，防竞态重试） */
   (async () => {
     try {
-      await window.__TAURI__.event.listen('focus-state', (e) => {
-        console.log('[pip] 收到 focus-state:', e.payload);
-        applyState(e.payload);
-      });
+      await T.event.listen('focus-state', (e) => applyState(e.payload));
+      await T.event.listen('ball-mode', (e) => applyMode(e.payload));
       $('#taskText').textContent = '监听已注册，等待状态…';
     } catch (err) {
       $('#taskText').textContent = '监听注册失败: ' + err;
       return;
     }
-    const req = () => window.__TAURI__.event.emit('focus-request')
-      .then(() => console.log('[pip] 已发 focus-request'))
-      .catch((e) => console.warn('[pip] focus-request 失败:', e));
+    invoke('ball_state').then(applyMode).catch(() => {});
+    const req = () => T.event.emit('focus-request').catch(() => {});
     req();
     setTimeout(req, 800);
   })();
 } else {
-  /* 浏览器兜底：轮询本地服务器 */
+  /* 浏览器兜底：轮询本地服务器（此文件只在 Tauri 里用，保留兜底便于调试） */
   async function poll() {
     try {
       const r = await fetch(API, { cache: 'no-store' });
@@ -286,7 +504,7 @@ if (isTauri) {
   setInterval(poll, 1500);
 }
 
-setInterval(loop, 500);
+setInterval(loop, 250);
 loop();
   })();
 }

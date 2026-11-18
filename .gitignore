@@ -6,3 +6,5 @@ src-tauri/target/
 .workbuddy/
 sync-last.log
 _icon-preview.png
+_*.png
+预览-*.png
