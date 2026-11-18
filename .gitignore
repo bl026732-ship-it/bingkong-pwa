@@ -8,3 +8,5 @@ sync-last.log
 _icon-preview.png
 _*.png
 预览-*.png
+_*.py
+_*.html

@@ -197,6 +197,9 @@ body[data-theme="light"] .win {
   border-color: rgba(60,50,40,.16);
   box-shadow: 0 12px 40px rgba(120,90,50,.2);
 }
+/* 球/胶囊贴边时改用紧凑阴影：40px 大扩散在透明窗口里会铺成一整块方形底色 */
+body[data-theme="light"][data-mode="ball"] .win,
+body[data-theme="light"][data-mode="capsule"] .win { box-shadow: 0 3px 10px rgba(90,70,50,.16); }
 body[data-theme="light"] .win::before {
   background: radial-gradient(220px 120px at 12% -35%, rgba(255,150,40,.2), transparent 65%);
 }
